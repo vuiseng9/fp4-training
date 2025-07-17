@@ -1,0 +1,45 @@
+data
+# ── Python byte‑code ───────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# ── Virtual‑envs & dependency managers ────────────────────────────────────────
+.venv/
+env/
+venv/
+# Poetry / Pipenv
+.poetry/
+Pipfile.lock
+# Conda
+*.conda
+*.ipynb_checkpoints/
+
+# ── Build / dist artifacts ────────────────────────────────────────────────────
+build/
+dist/
+*.egg-info/
+*.egg
+*.whl
+*.manifest
+*.spec
+
+# ── Test / coverage output ────────────────────────────────────────────────────
+htmlcov/
+.coverage*
+.cache/
+.tox/
+pytest_cache/
+
+# ── IDE/editor settings ───────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# ── OS & miscellaneous ────────────────────────────────────────────────────────
+.DS_Store          # macOS
+Thumbs.db          # Windows
+*.log
+*.tmp
