@@ -29,6 +29,7 @@ test_loader  = DataLoader(test_ds,  batch_size=BATCH_SIZE)
 # ── 3. Model ───────────────────────────────────────────────────────────────────
 
 model = TinyViT().to(DEVICE)
+print(model)
 optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 criterion = nn.CrossEntropyLoss()
 scaler = GradScaler()

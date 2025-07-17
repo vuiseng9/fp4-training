@@ -5,6 +5,8 @@ import torch.nn.functional as F
 from .impl_layer import TransformerBlock
 
 USE_TORCHVISION_VIT = int(os.getenv('USE_TORCHVISION_VIT', 0))
+# 0: nn.TransformerEncoder
+# 1: TransformerBlock (Local custom implementation using nn.Linear etc.)
 
 class TinyViT(nn.Module):
     """

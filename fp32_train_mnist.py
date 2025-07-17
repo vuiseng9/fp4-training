@@ -30,6 +30,7 @@ test_loader  = DataLoader(test_ds,  batch_size=BATCH_SIZE)
 
 model = TinyViT().to(DEVICE)
 optimizer = torch.optim.Adam(model.parameters(), lr=LR)
+print(model)
 criterion = nn.CrossEntropyLoss()
 
 # ── 4. Training loop ───────────────────────────────────────────────────────────

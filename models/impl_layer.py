@@ -1,8 +1,27 @@
 ###
 # locally implemented layers
+import os
 import torch
 from torch import nn
 import torch.nn.functional as F
+
+USE_TE_LINEAR = int(os.getenv('USE_TE_LINEAR', 1))
+# 0: use nn.Linear in TransformerBlock
+# 1: use te.Linear in TransformerBlock
+
+if USE_TE_LINEAR == 0:
+    Linear = nn.Linear
+elif USE_TE_LINEAR == 1:
+    try:
+        import transformer_engine.pytorch as te
+    except ImportError:
+        print("transformer_engine.pytorch is not installed. Fall back to nn.Linear")
+        Linear = nn.Linear
+    else:
+        Linear = te.Linear
+else:
+    raise ValueError("Invalid USE_TE_LINEAR value. Must be 0 or 1.")
+
 
 class TransformerBlock(nn.Module):
     def __init__(self, E, F, H, dropout=0.1):
@@ -15,10 +34,10 @@ class TransformerBlock(nn.Module):
 
         self.ffn = nn.ModuleDict({
             "preln": nn.LayerNorm(E),
-            "up_proj": nn.Linear(E, F),
+            "up_proj": Linear(E, F),
             "act": nn.GELU(),
             "act_dropout": nn.Dropout(dropout),
-            "down_proj":nn.Linear(F, E),
+            "down_proj":Linear(F, E),
             "dropout": nn.Dropout(dropout),
         })
 
@@ -45,10 +64,10 @@ class AttentionBlock(nn.Module):
         self.attn_scale = 1 / (self.dh ** -0.5)
 
         self.preln = nn.LayerNorm(E)
-        self.q_proj = nn.Linear(E, E)
-        self.k_proj = nn.Linear(E, E)
-        self.v_proj = nn.Linear(E, E)
-        self.o_proj = nn.Linear(E, E)
+        self.q_proj = Linear(E, E)
+        self.k_proj = Linear(E, E)
+        self.v_proj = Linear(E, E)
+        self.o_proj = Linear(E, E)
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
