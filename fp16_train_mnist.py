@@ -1,6 +1,4 @@
-# mnist_train_simple.py
-# pip install torch torchvision tqdm
-
+import os
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
@@ -12,7 +10,7 @@ from torch.amp import autocast, GradScaler
 
 # ── 1. Hyper-params ────────────────────────────────────────────────────────────
 BATCH_SIZE   = 64
-EPOCHS       = 3
+EPOCHS       = int(os.getenv("NEPOCH", 3))
 LR           = 1e-3
 DEVICE       = "cuda" if torch.cuda.is_available() else "cpu"
 

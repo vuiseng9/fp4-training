@@ -1,6 +1,10 @@
+import os
 import torch
 from torch import nn
+import torch.nn.functional as F
+from .impl_layer import TransformerBlock
 
+USE_TORCHVISION_VIT = int(os.getenv('USE_TORCHVISION_VIT', 0))
 
 class TinyViT(nn.Module):
     """
@@ -35,15 +39,24 @@ class TinyViT(nn.Module):
         nn.init.trunc_normal_(self.cls_token, std=0.02)
 
         # (c) Single Transformer encoder block
-        self.encoder = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(
-                d_model=embed_dim,
-                nhead=num_heads,
-                dim_feedforward=int(embed_dim * mlp_ratio),
-                batch_first=True,
-            ),
-            num_layers=1
-        )
+        if USE_TORCHVISION_VIT == 1:
+            self.encoder = nn.TransformerEncoder(
+                nn.TransformerEncoderLayer(
+                    d_model=embed_dim,
+                    nhead=num_heads,
+                    dim_feedforward=int(embed_dim * mlp_ratio),
+                    batch_first=True,
+                ),
+                num_layers=1
+            )
+        elif USE_TORCHVISION_VIT == 0:
+            self.encoder = TransformerBlock(
+                E=embed_dim,
+                F=int(embed_dim * mlp_ratio),
+                H=num_heads
+            )
+        else:
+            raise ValueError("Invalid USE_TORCHVISION_VIT value. Must be 0 or 1.")
 
         # (d) Classification head
         self.mlp_head = nn.Linear(embed_dim, num_classes)
