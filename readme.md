@@ -17,3 +17,31 @@ Useful References:
 1. [2025/03/13, AMD's blog on FP8 Training](https://rocm.blogs.amd.com/software-tools-optimization/amd-optimized-rocm-docker-for-distributed-training/README.html)
 
 TODO SOTA Research:
+
+### Build TransformerEngine from source
+1. Using nvidia:cuda container (challenge, need corresponding build of PyTorch and HW)
+    ```bash
+    apt install -y cmake htop
+    pip install pybind11
+
+    git clone https://github.com/NVIDIA/TransformerEngine.git
+    cd TransformerEngine
+    git submodule update --init --recursive
+
+    export NVTE_FRAMEWORK=pytorch         # Optionally set framework
+    MAX_JOBS=$(nproc) pip3 install -v --no-build-isolation .   # Build and inst
+    # it takes a while, pls be patient, even it seems quiet in htop
+    ```
+1. Using Conda (challenge: hard to get bleeding-edge features)
+    ```bash
+    install-torch 126
+    install-cuda-toolkit-conda 12.6
+    conda install -c nvidia cudnn=9.10.2
+    cp -r /home/shadeform/miniforge3/envs/sf-250714-te/lib/python3.12/site-packages/nvidia/nvtx/include/nvtx3 /home/shadeform/miniforge3/envs/sf-250714-te/targets/x86_64-linux/include/.
+
+    MAX_JOBS=10 pip install --no-build-isolation transformer_engine[pytorch]
+
+    https://anaconda.org/nvidia/cudnn
+    copy nvtx3 folder to cuda.h folder
+    compile with more thread
+    ```
