@@ -33,7 +33,10 @@ model = TinyViT().to(DEVICE)
 print(model)
 optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 criterion = nn.CrossEntropyLoss()
-fp8_recipe = recipe.MXFP8BlockScaling()
+fp8_recipe = recipe.Float8BlockScaling()
+# blocks of various sizes (such as 1×128 or 128×128)
+# NOTE: To relax the default constraint that scales be powers of 2, set env variable
+#       NVTE_FP8_BLOCK_SCALING_FP32_SCALES=1 to override it for the recipe defaults.
 
 # ── 4. Training loop ───────────────────────────────────────────────────────────
 for epoch in range(1, EPOCHS + 1):

@@ -33,7 +33,7 @@ model = TinyViT().to(DEVICE)
 print(model)
 optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 criterion = nn.CrossEntropyLoss()
-fp8_recipe = recipe.DelayedScaling(margin=0, fp8_format=recipe.Format.HYBRID)
+fp8_recipe = recipe.DelayedScaling()
 # ── 4. Training loop ───────────────────────────────────────────────────────────
 for epoch in range(1, EPOCHS + 1):
     model.train()
@@ -42,7 +42,7 @@ for epoch in range(1, EPOCHS + 1):
     for x, y in tqdm(train_loader, desc=f"Epoch {epoch}/{EPOCHS}"):
         x, y = x.to(DEVICE), y.to(DEVICE)
 
-        with te.fp8_autocast(enabled=True, fp8_recipe=fp8_recipe) as fp8_ctx:
+        with te.fp8_autocast(fp8_recipe=fp8_recipe) as fp8_ctx:
             logits = model(x)
             loss   = criterion(logits, y)
 
