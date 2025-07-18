@@ -6,7 +6,7 @@ As of July 2025, PyTorch natively supports training down to 16-bit; NVIDIA’s [
 ### Fastest Setup
 ```bash
 # Transformer Engine included.
-docker run -d --gpus all -it --rm nvcr.io/nvidia/pytorch:25.04-py3
+docker run -d --gpus all -it --rm nvcr.io/nvidia/pytorch:25.06-py3
 ```
 
 Useful References:

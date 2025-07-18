@@ -60,7 +60,7 @@ class TinyViT(nn.Module):
         else:
             raise ValueError("Invalid USE_TORCHVISION_VIT value. Must be 0 or 1.")
 
-        # (d) Classification head
+        # (d) Classification head #NOTE: head is always nn.Linear
         self.mlp_head = nn.Linear(embed_dim, num_classes)
 
     def forward(self, x):                       # x: (B,1,28,28)
