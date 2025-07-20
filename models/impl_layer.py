@@ -4,6 +4,7 @@ import os
 import torch
 from torch import nn
 import torch.nn.functional as F
+from impl.linear import CustomLinear
 
 USE_TE_LINEAR = int(os.getenv('USE_TE_LINEAR', 1))
 # 0: use nn.Linear in TransformerBlock
@@ -22,7 +23,7 @@ elif USE_TE_LINEAR == 1:
 else:
     raise ValueError("Invalid USE_TE_LINEAR value. Must be 0 or 1.")
 
-
+Linear = CustomLinear
 class TransformerBlock(nn.Module):
     def __init__(self, E, F, H, dropout=0.1):
         super().__init__()
