@@ -44,6 +44,10 @@ class CustomLinear(torch.nn.Linear):
     def forward(self, input):
         return CustomMatMul.apply(input, self.weight, self.bias)
     
+    def extra_repr(self) -> str:
+        b_str = "T" if self.bias is not None else "F"
+        return f"IC={self.in_features}, OC={self.out_features}, b={b_str}"
+    
 
 # Open questions:
 # 1. B, L dimension
