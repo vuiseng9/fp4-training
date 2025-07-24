@@ -23,7 +23,6 @@ elif USE_TE_LINEAR == 1:
 else:
     raise ValueError("Invalid USE_TE_LINEAR value. Must be 0 or 1.")
 
-Linear = CustomLinear
 class TransformerBlock(nn.Module):
     def __init__(self, E, F, H, dropout=0.1):
         super().__init__()
