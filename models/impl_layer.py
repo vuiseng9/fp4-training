@@ -4,7 +4,6 @@ import os
 import torch
 from torch import nn
 import torch.nn.functional as F
-from impl.linear import CustomLinear
 
 USE_TE_LINEAR = int(os.getenv('USE_TE_LINEAR', 1))
 # 0: use nn.Linear in TransformerBlock
