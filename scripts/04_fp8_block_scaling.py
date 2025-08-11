@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 from tqdm import tqdm
 
-from models.vit import TinyViT
+from models import TinyViT
 import transformer_engine.pytorch as te
 from transformer_engine.common import recipe
 
@@ -29,7 +29,7 @@ test_loader  = DataLoader(test_ds,  batch_size=BATCH_SIZE)
 
 # ── 3. Model ───────────────────────────────────────────────────────────────────
 
-model = TinyViT().to(DEVICE)
+model = TinyViT(use_te_linear=True).to(DEVICE)
 print(model)
 optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 criterion = nn.CrossEntropyLoss()

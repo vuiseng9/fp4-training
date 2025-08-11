@@ -5,38 +5,34 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-USE_TE_LINEAR = int(os.getenv('USE_TE_LINEAR', 1))
-# 0: use nn.Linear in TransformerBlock
-# 1: use te.Linear in TransformerBlock
+from custom.linear import CustomLinear
 
-if USE_TE_LINEAR == 0:
-    Linear = nn.Linear
-elif USE_TE_LINEAR == 1:
-    try:
-        import transformer_engine.pytorch as te
-    except ImportError:
-        print("transformer_engine.pytorch is not installed. Fall back to nn.Linear")
-        Linear = nn.Linear
-    else:
-        Linear = te.Linear
-else:
-    raise ValueError("Invalid USE_TE_LINEAR value. Must be 0 or 1.")
+try:
+    import transformer_engine.pytorch as te
+except ImportError:
+    Warning("transformer_engine.pytorch is not installed.")
+
+LINEAR_IMPL = {
+    "torch": nn.Linear,
+    "te": te.Linear if te is not None else None, # dont fall back, so that we are aware what is going on
+}
 
 class TransformerBlock(nn.Module):
-    def __init__(self, E, F, H, dropout=0.1):
+    def __init__(self, E, F, H, dropout=0.1, impl="torch"):
         super().__init__()
         self.E = E
         self.F = F
         self.H = H
+        self.impl = impl
 
-        self.attn = AttentionBlock(E, H, dropout)
+        self.attn = AttentionBlock(E, H, dropout, impl=impl)
 
         self.ffn = nn.ModuleDict({
             "preln": nn.LayerNorm(E),
-            "up_proj": Linear(E, F),
+            "up_proj": LINEAR_IMPL[impl](E, F),
             "act": nn.GELU(),
             "act_dropout": nn.Dropout(dropout),
-            "down_proj":Linear(F, E),
+            "down_proj": LINEAR_IMPL[impl](F, E),
             "dropout": nn.Dropout(dropout),
         })
 
@@ -53,7 +49,7 @@ class TransformerBlock(nn.Module):
     
 
 class AttentionBlock(nn.Module):
-    def __init__(self, E, H, dropout=0.1):
+    def __init__(self, E, H, dropout=0.1, impl="torch"):
         super().__init__()
         assert E % H == 0, "head size is not multiple of embedding size"
 
@@ -63,10 +59,10 @@ class AttentionBlock(nn.Module):
         self.attn_scale = 1 / (self.dh ** -0.5)
 
         self.preln = nn.LayerNorm(E)
-        self.q_proj = Linear(E, E)
-        self.k_proj = Linear(E, E)
-        self.v_proj = Linear(E, E)
-        self.o_proj = Linear(E, E)
+        self.q_proj = LINEAR_IMPL[impl](E, E)
+        self.k_proj = LINEAR_IMPL[impl](E, E)
+        self.v_proj = LINEAR_IMPL[impl](E, E)
+        self.o_proj = LINEAR_IMPL[impl](E, E)
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):

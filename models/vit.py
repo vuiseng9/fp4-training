@@ -2,7 +2,8 @@ import os
 import torch
 from torch import nn
 import torch.nn.functional as F
-from .impl_layer import TransformerBlock
+from .transformer_block import TransformerBlock
+import warnings
 
 USE_TORCHVISION_VIT = int(os.getenv('USE_TORCHVISION_VIT', 0))
 # 0: nn.TransformerEncoder
@@ -21,8 +22,12 @@ class TinyViT(nn.Module):
         embed_dim=64,
         num_heads=4,
         mlp_ratio=2.0,
+        use_te_linear=False
     ):
         super().__init__()
+
+        self.torchvision_vit = USE_TORCHVISION_VIT
+        self.use_te_linear = use_te_linear
 
         assert img_size % patch_size == 0, "patch_size must divide img_size exactly"
         self.num_patches = (img_size // patch_size) ** 2
@@ -42,6 +47,10 @@ class TinyViT(nn.Module):
 
         # (c) Single Transformer encoder block
         if USE_TORCHVISION_VIT == 1:
+            if use_te_linear:
+                warnings.warn("use_te_linear unhonored, USE_TORCHVISION_VIT is set, using native torchvision nn.TransformerEncoder")
+                self.use_te_linear = False
+
             self.encoder = nn.TransformerEncoder(
                 nn.TransformerEncoderLayer(
                     d_model=embed_dim,
@@ -55,7 +64,8 @@ class TinyViT(nn.Module):
             self.encoder = TransformerBlock(
                 E=embed_dim,
                 F=int(embed_dim * mlp_ratio),
-                H=num_heads
+                H=num_heads,
+                impl="te" if use_te_linear else "torch"
             )
         else:
             raise ValueError("Invalid USE_TORCHVISION_VIT value. Must be 0 or 1.")
