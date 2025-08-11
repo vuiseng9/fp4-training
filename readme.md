@@ -1,13 +1,54 @@
 ### Quantized Training
 
 Minimal examples and notes illustrating model training across floating point and microscaling precision formats.
-As of July 2025, PyTorch natively supports training down to 16-bit; NVIDIA’s [Transformer Engine](https://github.com/NVIDIA/TransformerEngine) is required for FP8 and below.
+As of July 2025, PyTorch natively supports training down to 16-bit; 
+
+Options to train in FP8:
+* NVIDIA [Transformer Engine](https://github.com/NVIDIA/TransformerEngine)
+* PyTorch [TorchAO](https://github.com/pytorch/ao/tree/main/torchao/float8#training-benchmarks)
+
+Most examples packaged here are mostly Transformer Engine first.
+
+> no installation required, just remember to set PYTHONPATH=/path/to/quantized-training
 
 ### Fastest Setup
 ```bash
 # Transformer Engine included.
 docker run -d --gpus all -it --rm nvcr.io/nvidia/pytorch:25.06-py3
+
+# this version support transformer engine v2.4+, FP8 Block scaling only on Hopper, MXFP8 only on Blackwell, RTX50 series not supported in TE but HW does have them, use CUTLASS
 ```
+AMD
+```bash
+# IMG_NAME=rocm/pytorch:rocm6.4.2_ubuntu24.04_py3.12_pytorch_release_2.6.0 # no TE
+
+# docker run -d -it \
+#     --cap-add=SYS_PTRACE \
+#     --security-opt seccomp=unconfined \
+#     --device=/dev/kfd \
+#     --device=/dev/dri \
+#     --group-add video \
+#     --ipc=host \
+#     --shm-size 8G \
+#     $IMG_NAME
+
+IMG_NAME=rocm/megatron-lm:v25.6_py312
+docker run -d -it \
+    --device /dev/dri \
+    --device /dev/kfd \
+    --device /dev/infiniband \
+    --network host --ipc host \
+    --group-add video \
+    --cap-add SYS_PTRACE \
+    --security-opt seccomp=unconfined \
+    --privileged \
+    -v $HOME/.ssh:/root/.ssh \
+    --shm-size 128G \
+    --name megatron_training_env \
+    $IMG_NAME
+    # -v $HOME:$HOME \
+```
+
 
 Useful References:
 1. [Tranformer Engine Documentation](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/examples/fp8_primer.html)
@@ -18,8 +59,11 @@ Useful References:
 
 TODO SOTA Research:
 
+[Pre-training with float8 using torchtitan and torchao](https://docs.pytorch.org/ao/0.12/pretraining.html#pre-training-with-torchtitan)
+Quick note: Torchao supports float8 rowwise and tensorwise.
+
 ### Build TransformerEngine from source
-1. Using nvidia:cuda container (challenge, need corresponding build of PyTorch and HW)
+1. Using nvidia:cuda container (challenge, need corresponding build of PyTorch and HW, TE and Torch CUDA must match)
     ```bash
     apt install -y cmake htop
     pip install pybind11
