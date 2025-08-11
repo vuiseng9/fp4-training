@@ -78,9 +78,9 @@ class AttentionBlock(nn.Module):
         residual = x
         x   = self.preln(x)
         
-        q   = self.q_proj(x).reshape(B, L, self.H, self.dh).transpose(1, 2)                   # B, H, L, dh
-        k_t = self.k_proj(x).reshape(B, L, self.H, self.dh).transpose(1, 2).transpose(-2, -1) # B, H, dh, L
-        v   = self.v_proj(x).reshape(B, L, self.H, self.dh).transpose(1, 2)                   # B, H, L, dh
+        q   = self.q_proj(x).view(B, L, self.H, self.dh).transpose(1, 2)                   # B, H, L, dh
+        k_t = self.k_proj(x).view(B, L, self.H, self.dh).transpose(1, 2).transpose(-2, -1) # B, H, dh, L
+        v   = self.v_proj(x).view(B, L, self.H, self.dh).transpose(1, 2)                   # B, H, L, dh
 
         score = (q @ k_t) * self.attn_scale
         attn = F.softmax(score, dim=-1)
@@ -89,7 +89,7 @@ class AttentionBlock(nn.Module):
         attn = prob @ v
 
         # attn (B, H, L, dh) -> (B, L, H, dh) -> (B, L, E) 
-        attn = attn.transpose(1, 2).contiguous().reshape(B, L, E)
+        attn = attn.transpose(1, 2).contiguous().view(B, L, E)
 
         out = self.o_proj(attn)
 
