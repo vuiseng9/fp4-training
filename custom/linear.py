@@ -1,5 +1,6 @@
 
 import torch
+import backend.xops
 
 class CustomMatMul(torch.autograd.Function):
     """
@@ -84,3 +85,57 @@ class CustomLinear(torch.nn.Linear):
     def extra_repr(self) -> str:
         b_str = "T" if self.bias is not None else "F"
         return f"IC={self.in_features}, OC={self.out_features}, b={b_str}"
+    
+
+class CudaMM(torch.autograd.Function):
+    """
+    Custom matrix multiplication function using native pytorch torch.matmul.
+    Expect 2d by 2d inputs, with optional bias. 
+    Intent is to make this code readable, and as template to other custom backend.
+    """
+    @staticmethod
+    def forward(ctx, X, W, b=None):
+        # no shape checking as it is handled at backend function
+
+        Y = torch.ops.xops.addmm_cuda(X, W.T, b)  # b can be None or vector
+
+        ctx.save_for_backward(X, W) 
+        # we can't save b if it is none. 
+        # That is okay, b is also not needed when it is not none 
+        # because constant -> zero in derivative
+        ctx.has_bias = b is not None
+        return Y
+    
+    @staticmethod
+    def backward(ctx, grad_Y):
+        X, W = ctx.saved_tensors
+        grad_X = grad_W = grad_b = None
+
+        if ctx.needs_input_grad[0] is True:
+            grad_X = torch.ops.xops.addmm_cuda(grad_Y, W)
+
+        if ctx.needs_input_grad[1] is True:
+            grad_W = torch.ops.xops.addmm_cuda(grad_Y.T, X)
+            
+        if ctx.has_bias and ctx.needs_input_grad[2] is True:
+            grad_b = grad_Y.sum(dim=0) # Original bias shape (OC,)
+
+        return grad_X, grad_W, grad_b
+    
+    
+
+class CudaMMLinear(CustomLinear):
+    """
+    Custom linear layer using aten addmm/mm.
+    Intentionally for CUDA only.
+    """
+    def forward(self, input):
+        shapes = None
+        if input.ndim > 2:
+            shapes = input.shape
+            input = input.view(-1, shapes[-1])
+        out =  CudaMM.apply(input, self.weight, self.bias)
+        
+        if shapes is not None:
+            out = out.view(shapes[:-1] + (self.out_features,))
+        return out

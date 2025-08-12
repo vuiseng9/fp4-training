@@ -43,3 +43,5 @@ pytest_cache/
 Thumbs.db          # Windows
 *.log
 *.tmp
+
+*.so

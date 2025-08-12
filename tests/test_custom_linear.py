@@ -1,7 +1,9 @@
 import pytest
 import torch
 import torch.nn as nn
-from custom import CustomLinear
+from custom import CustomLinear, CudaMMLinear
+
+LINEAR_TESTLIST = [CustomLinear, CudaMMLinear]
 
 dtype_label = {
     torch.float32: "f32",
@@ -15,7 +17,7 @@ class TestCustomizedLinear:
     @pytest.mark.parametrize("ic", [10, 20, 50], ids=lambda x: f"{x}.ic")
     @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16], ids=lambda x: dtype_label.get(x))
     @pytest.mark.parametrize("device", ["cpu", "cuda"])
-    @pytest.mark.parametrize("constructor", [CustomLinear])
+    @pytest.mark.parametrize("constructor", LINEAR_TESTLIST)
     def test_construction(self, ic, oc, use_bias, dtype, device, constructor):
         layer = constructor(ic, oc, bias=use_bias).to(device=device, dtype=dtype)
         assert layer.in_features == ic
@@ -32,7 +34,7 @@ class TestCustomizedLinear:
     @pytest.mark.parametrize("ic", [10, 20, 50], ids=lambda x: f"{x}.ic")
     @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16], ids=lambda x: dtype_label.get(x))
     @pytest.mark.parametrize("device", ["cpu", "cuda"])
-    @pytest.mark.parametrize("constructor", [CustomLinear])
+    @pytest.mark.parametrize("constructor", LINEAR_TESTLIST)
     def test_construction_from_linear(self, ic, oc, use_bias, dtype, device, constructor):
         torch_linear = nn.Linear(ic, oc, bias=use_bias).to(device=device, dtype=dtype)
         custom_linear = constructor.from_linear(torch_linear)
@@ -56,7 +58,7 @@ class TestCustomizedLinear:
     @pytest.mark.parametrize("oc", [16, 32, 128], ids=lambda x: f"{x}.oc")
     @pytest.mark.parametrize("ic", [16, 32, 256], ids=lambda x: f"{x}.ic")
     @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16], ids=lambda x: dtype_label.get(x))
-    @pytest.mark.parametrize("constructor", [CustomLinear])
+    @pytest.mark.parametrize("constructor", LINEAR_TESTLIST)
     def test_fwd_bwd_cuda(self, ic, oc, use_bias, dtype, constructor):
         torch_linear = nn.Linear(ic, oc, bias=use_bias).to(device="cuda", dtype=dtype)
         custom_linear = constructor.from_linear(torch_linear)
