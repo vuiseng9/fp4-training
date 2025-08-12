@@ -1,13 +1,13 @@
 import pytest
 import torch
 import torch.nn as nn
-from custom import CustomLinear, CudaMMLinear, CuBlasltMMLinear
+from custom import CustomLinear, CudaMMLinear, CublasltLinear
 
 LINEAR_TOLERANCES = [
     # (class, atol)
     (CustomLinear, 1e-5),
     (CudaMMLinear, 1e-5),
-    (CuBlasltMMLinear, 1e-3)
+    (CublasltLinear, 1e-4)
 ]
 
 LINEAR_TESTLIST = list(map(lambda t: t[0], LINEAR_TOLERANCES))
@@ -16,6 +16,9 @@ dtype_label = {
     torch.float32: "f32",
     torch.bfloat16: "bf16"
 }
+
+def assert_allclose(x, ref, atol):
+    assert torch.allclose(x, ref, atol=atol), f"max error {(x-ref).abs().max()} > {atol}"
 
 class TestCustomizedLinear:
 
@@ -81,7 +84,7 @@ class TestCustomizedLinear:
         assert y.shape == (B, oc)
         assert y.dtype == dtype
         assert y.is_cuda
-        assert torch.allclose(y, ref_y, atol=atol)
+        assert_allclose(y, ref_y, atol)
 
         # 3D inputs
         x = torch.randn(B, L, ic).to(device="cuda", dtype=dtype)
@@ -95,15 +98,15 @@ class TestCustomizedLinear:
         assert y.shape == (B, L, oc)
         assert y.dtype == dtype
         assert y.is_cuda
-        assert torch.allclose(y, ref_y, atol=atol)
+        assert_allclose(y, ref_y, atol)
 
         # Backward pass
         y.sum().backward()
         ref_y.sum().backward()
 
-        assert torch.allclose(custom_linear.weight.grad, torch_linear.weight.grad, atol=atol)
-        assert torch.allclose(x.grad, ref_x.grad, atol=atol)
-        
+        assert_allclose(custom_linear.weight.grad, torch_linear.weight.grad, atol)
+        assert_allclose(x.grad, ref_x.grad, atol)
+
         if use_bias:
-            assert torch.allclose(custom_linear.bias.grad, torch_linear.bias.grad, atol=atol)
+            assert_allclose(custom_linear.bias.grad, torch_linear.bias.grad, atol)
 

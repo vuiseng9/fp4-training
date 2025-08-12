@@ -2,6 +2,8 @@
 import torch
 import backend.xops
 
+op = torch.ops.xops
+
 class CustomMatMul(torch.autograd.Function):
     """
     Custom matrix multiplication function using native pytorch torch.matmul.
@@ -97,7 +99,7 @@ class CudaMM(torch.autograd.Function):
     def forward(ctx, X, W, b=None):
         # no shape checking as it is handled at backend function
 
-        Y = torch.ops.xops.addmm_cuda(X, W.T, b)  # b can be None or vector
+        Y = op.addmm_cuda(X, W.T, b)  # b can be None or vector
 
         ctx.save_for_backward(X, W) 
         # we can't save b if it is none. 
@@ -112,10 +114,10 @@ class CudaMM(torch.autograd.Function):
         grad_X = grad_W = grad_b = None
 
         if ctx.needs_input_grad[0] is True:
-            grad_X = torch.ops.xops.addmm_cuda(grad_Y, W)
+            grad_X = op.addmm_cuda(grad_Y, W)
 
         if ctx.needs_input_grad[1] is True:
-            grad_W = torch.ops.xops.addmm_cuda(grad_Y.T, X)
+            grad_W = op.addmm_cuda(grad_Y.T, X)
             
         if ctx.has_bias and ctx.needs_input_grad[2] is True:
             grad_b = grad_Y.sum(dim=0) # Original bias shape (OC,)
@@ -141,7 +143,7 @@ class CudaMMLinear(CustomLinear):
         return out
     
 
-class CuBlasltMM(torch.autograd.Function):
+class CublasltLinearFunc(torch.autograd.Function):
     """
     Custom matrix multiplication function using cublasLtMatmul.
     Expect 2d by 2d inputs, with optional bias. 
@@ -150,7 +152,7 @@ class CuBlasltMM(torch.autograd.Function):
     def forward(ctx, X, W, b=None):
         # no shape checking as it is handled at backend function
 
-        Y = torch.ops.xops.cublaslt_mm(X, W.T, b)  # b can be None or vector
+        Y = op.cublaslt_linear(W, X, b)  # b can be None or vector
 
         ctx.save_for_backward(X, W) 
         # we can't save b if it is none. 
@@ -165,10 +167,10 @@ class CuBlasltMM(torch.autograd.Function):
         grad_X = grad_W = grad_b = None
 
         if ctx.needs_input_grad[0] is True:
-            grad_X = torch.ops.xops.cublaslt_mm(grad_Y, W)
+            grad_X = op.addmm_cuda(grad_Y, W)
 
         if ctx.needs_input_grad[1] is True:
-            grad_W = torch.ops.xops.cublaslt_mm(grad_Y.T, X)
+            grad_W = op.addmm_cuda(grad_Y.T, X)
 
         if ctx.has_bias and ctx.needs_input_grad[2] is True:
             grad_b = grad_Y.sum(dim=0) # Original bias shape (OC,)
@@ -177,7 +179,7 @@ class CuBlasltMM(torch.autograd.Function):
     
     
 
-class CuBlasltMMLinear(CustomLinear):
+class CublasltLinear(CustomLinear):
     """
     Custom linear layer using cublasLtMatmul.
     """
@@ -186,8 +188,8 @@ class CuBlasltMMLinear(CustomLinear):
         if input.ndim > 2:
             shapes = input.shape
             input = input.view(-1, shapes[-1])
-        out =  CuBlasltMM.apply(input, self.weight, self.bias)
-        
+        out =  CublasltLinearFunc.apply(input, self.weight, self.bias)
+
         if shapes is not None:
             out = out.view(shapes[:-1] + (self.out_features,))
         return out
