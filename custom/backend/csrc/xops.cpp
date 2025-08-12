@@ -14,4 +14,5 @@ extern "C" PyObject* PyInit_xops(void) {
 
 TORCH_LIBRARY(xops, m) {
   m.def("addmm_cuda(Tensor a, Tensor b, Tensor? c=None) -> Tensor");
+  m.def("cublaslt_mm(Tensor a, Tensor b, Tensor? c=None) -> Tensor");
 }

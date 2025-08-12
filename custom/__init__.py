@@ -1,3 +1,3 @@
-from .linear import CustomLinear, CudaMMLinear
+from .linear import CustomLinear, CudaMMLinear, CuBlasltMMLinear
 
-__all__ = ["CustomLinear", "CudaMMLinear"]
+__all__ = ["CustomLinear", "CudaMMLinear", "CuBlasltMMLinear"]

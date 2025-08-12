@@ -1,9 +1,16 @@
 import pytest
 import torch
 import torch.nn as nn
-from custom import CustomLinear, CudaMMLinear
+from custom import CustomLinear, CudaMMLinear, CuBlasltMMLinear
 
-LINEAR_TESTLIST = [CustomLinear, CudaMMLinear]
+LINEAR_TOLERANCES = [
+    # (class, atol)
+    (CustomLinear, 1e-5),
+    (CudaMMLinear, 1e-5),
+    (CuBlasltMMLinear, 1e-3)
+]
+
+LINEAR_TESTLIST = list(map(lambda t: t[0], LINEAR_TOLERANCES))
 
 dtype_label = {
     torch.float32: "f32",
@@ -58,8 +65,9 @@ class TestCustomizedLinear:
     @pytest.mark.parametrize("oc", [16, 32, 128], ids=lambda x: f"{x}.oc")
     @pytest.mark.parametrize("ic", [16, 32, 256], ids=lambda x: f"{x}.ic")
     @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16], ids=lambda x: dtype_label.get(x))
-    @pytest.mark.parametrize("constructor", LINEAR_TESTLIST)
-    def test_fwd_bwd_cuda(self, ic, oc, use_bias, dtype, constructor):
+    @pytest.mark.parametrize("constructor_tol", LINEAR_TOLERANCES, ids=lambda x: x[0].__name__ + f"-{x[1]}")
+    def test_fwd_bwd_cuda(self, ic, oc, use_bias, dtype, constructor_tol):
+        constructor, atol = constructor_tol
         torch_linear = nn.Linear(ic, oc, bias=use_bias).to(device="cuda", dtype=dtype)
         custom_linear = constructor.from_linear(torch_linear)
 
@@ -73,7 +81,7 @@ class TestCustomizedLinear:
         assert y.shape == (B, oc)
         assert y.dtype == dtype
         assert y.is_cuda
-        assert torch.allclose(y, ref_y, atol=1e-5)
+        assert torch.allclose(y, ref_y, atol=atol)
 
         # 3D inputs
         x = torch.randn(B, L, ic).to(device="cuda", dtype=dtype)
@@ -87,15 +95,15 @@ class TestCustomizedLinear:
         assert y.shape == (B, L, oc)
         assert y.dtype == dtype
         assert y.is_cuda
-        assert torch.allclose(y, ref_y, atol=1e-5)
+        assert torch.allclose(y, ref_y, atol=atol)
 
         # Backward pass
         y.sum().backward()
         ref_y.sum().backward()
 
-        assert torch.allclose(custom_linear.weight.grad, torch_linear.weight.grad, atol=1e-5)
-        assert torch.allclose(x.grad, ref_x.grad, atol=1e-5)
+        assert torch.allclose(custom_linear.weight.grad, torch_linear.weight.grad, atol=atol)
+        assert torch.allclose(x.grad, ref_x.grad, atol=atol)
         
         if use_bias:
-            assert torch.allclose(custom_linear.bias.grad, torch_linear.bias.grad, atol=1e-5)
+            assert torch.allclose(custom_linear.bias.grad, torch_linear.bias.grad, atol=atol)
 

@@ -6,3 +6,5 @@ clean:
 
 install:
 	MAX_JOBS=2 pip install -e . -v --no-build-isolation
+
+re: clean install

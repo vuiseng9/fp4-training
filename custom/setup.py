@@ -11,7 +11,8 @@ setup(
             name="backend.xops", 
             sources=[
                 "backend/csrc/xops.cpp", 
-                "backend/csrc/aten_mm.cpp"
+                "backend/csrc/aten_mm.cpp",
+                "backend/csrc/cublaslt_mm.cu",
                 ]
             )],
       cmdclass={'build_ext': cpp_extension.BuildExtension},
