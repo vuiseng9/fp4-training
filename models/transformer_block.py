@@ -4,17 +4,18 @@ import os
 import torch
 from torch import nn
 import torch.nn.functional as F
-
+from custom import CustomLinear
 
 try:
     import transformer_engine.pytorch as te
 except ImportError:
     Warning("transformer_engine.pytorch is not installed.")
     te = None
-    
+
 LINEAR_IMPL = {
     "torch": nn.Linear,
     "te": te.Linear if te is not None else None, # dont fall back, so that we are aware what is going on
+    "custom_py": CustomLinear
 }
 
 class TransformerBlock(nn.Module):
