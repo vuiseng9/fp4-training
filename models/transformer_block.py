@@ -4,7 +4,7 @@ import os
 import torch
 from torch import nn
 import torch.nn.functional as F
-from custom import CustomLinear, CudaMMLinear
+from custom import CustomLinear, CudaMMLinear, CublasltLinear
 
 try:
     import transformer_engine.pytorch as te
@@ -16,7 +16,8 @@ LINEAR_IMPL = {
     "torch": nn.Linear,
     "te": te.Linear if te is not None else None, # dont fall back, so that we are aware what is going on
     "custom_py": CustomLinear,
-    "custom_aten_mm": CudaMMLinear
+    "custom_aten_mm": CudaMMLinear,
+    "cublaslt": CublasltLinear,
 }
 
 class TransformerBlock(nn.Module):

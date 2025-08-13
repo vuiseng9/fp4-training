@@ -167,10 +167,10 @@ class CublasltLinearFunc(torch.autograd.Function):
         grad_X = grad_W = grad_b = None
 
         if ctx.needs_input_grad[0] is True:
-            grad_X = op.addmm_cuda(grad_Y, W)
+            grad_X = op.cublaslt_matmul(grad_Y, W)
 
         if ctx.needs_input_grad[1] is True:
-            grad_W = op.addmm_cuda(grad_Y.T, X)
+            grad_W = op.cublaslt_matmul(grad_Y.T, X)
 
         if ctx.has_bias and ctx.needs_input_grad[2] is True:
             grad_b = grad_Y.sum(dim=0) # Original bias shape (OC,)

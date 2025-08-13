@@ -52,6 +52,29 @@ inline cublasComputeType_t to_compute_type(at::ScalarType t) {
     TORCH_CHECK(false, "Only torch.float32 and torch.bfloat16 are supported");
 }
 
+// One-time init of cuBLASLt heuristics cache capacity (thread-safe)
+static void ensure_cublaslt_cache_configured() {
+    static std::once_flag once;
+    std::call_once(once, [](){
+        size_t current = 0;
+        cublasStatus_t st = cublasLtHeuristicsCacheGetCapacity(&current);
+        TORCH_CHECK(st == CUBLAS_STATUS_SUCCESS,
+                    "cublasLtHeuristicsCacheGetCapacity failed");
+
+        const size_t desired = static_cast<size_t>(32768);
+        if (current != desired) {
+            st = cublasLtHeuristicsCacheSetCapacity(desired);
+            TORCH_CHECK(st == CUBLAS_STATUS_SUCCESS,
+                        "cublasLtHeuristicsCacheSetCapacity(", desired,
+                        ") failed (current was ", current, ")");
+            // Optional: uncomment to see a one-time note
+            TORCH_WARN("cuBLASLt heuristics cache capacity set to ", desired,
+                       " (was ", current, ")");
+        }
+        // else: already at desired capacity; nothing to do.
+    });
+}
+
 /*
 Take note because it is confusing.
 
@@ -121,11 +144,14 @@ at::Tensor cublaslt_linear(const at::Tensor& W, const at::Tensor& X, const c10::
     // Use PyTorch's pooled cuBLASLt handle (don't create/destroy yourself)
     cublasLtHandle_t lt = at::cuda::getCurrentCUDABlasLtHandle();
 
+    // Ensure cuBLASLt's internal heuristics cache is configured
+    ensure_cublaslt_cache_configured();
+
     const cudaDataType dataType = to_cuda_dtype(dtype);
     const cublasComputeType_t computeType = to_compute_type(dtype);
     const cudaDataType scaleType = CUDA_R_32F; // alpha/beta in float
 
-    // Matmul descriptor, CUBLAS_OP_N means no transpose
+    // Matmul descriptor
     cublasLtMatmulDesc_t opDesc;
     CUBLASLT_CHECK(cublasLtMatmulDescCreate(&opDesc, computeType, scaleType));
     {
@@ -209,8 +235,115 @@ at::Tensor cublaslt_linear(const at::Tensor& W, const at::Tensor& X, const c10::
     return Y;
 }
 
+// matmul without bias, A, B are row-major, so is output
+// for ease of use, less confusion of mapping tensor axes
+at::Tensor cublaslt_matmul(const at::Tensor& A, const at::Tensor& B) {
+
+    CHECK_CUDA(A); CHECK_CUDA(B);
+    TORCH_CHECK(A.device() == B.device(), "A and B must be on the same CUDA device");
+
+    const auto dtype = A.scalar_type();
+    TORCH_CHECK((dtype == at::kFloat || dtype == at::kBFloat16), "Only supports float32 or bfloat16; but found ", dtype);
+    TORCH_CHECK(A.scalar_type() == dtype && B.scalar_type() == dtype, "A and B must be of the same dtype");
+
+    TORCH_CHECK(A.dim() == 2 && B.dim() == 2, "A and B must be 2-D (matrix)");
+    const auto M = A.size(0);
+    const auto K = A.size(1);
+    const auto N = B.size(1);
+    TORCH_CHECK(B.size(0) == K, "matmul inner dims must match: found A(", M, ",", K, "**) vs B(", B.size(0), ",:", N, "**)");
+
+    at::Tensor A_ = A.contiguous();
+    at::Tensor B_ = B.contiguous();
+
+    auto D = at::empty({M, N}, A_.options()); 
+
+    // Device guard & stream
+    c10::cuda::CUDAGuard guard(A_.device());
+    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+    cublasLtHandle_t lt = at::cuda::getCurrentCUDABlasLtHandle();
+
+    // Ensure cuBLASLt's internal heuristics cache is configured
+    ensure_cublaslt_cache_configured();
+
+    const cudaDataType dataType = to_cuda_dtype(dtype);
+    const cublasComputeType_t computeType = to_compute_type(dtype);
+    const cudaDataType scaleType = CUDA_R_32F; // alpha/beta in float
+
+    // Matmul descriptor
+    cublasLtMatmulDesc_t opDesc;
+    CUBLASLT_CHECK(cublasLtMatmulDescCreate(&opDesc, computeType, scaleType));
+    {
+        cublasOperation_t transA = CUBLAS_OP_N;
+        cublasOperation_t transB = CUBLAS_OP_N;
+        CUBLASLT_CHECK(cublasLtMatmulDescSetAttribute(
+            opDesc, CUBLASLT_MATMUL_DESC_TRANSA, &transA, sizeof(transA)));
+        CUBLASLT_CHECK(cublasLtMatmulDescSetAttribute(
+            opDesc, CUBLASLT_MATMUL_DESC_TRANSB, &transB, sizeof(transB)));
+    }
+
+    cublasLtMatrixLayout_t aLayout, bLayout, cLayout, dLayout;
+    cublasLtOrder_t row_major = CUBLASLT_ORDER_ROW;
+
+    CUBLASLT_CHECK(cublasLtMatrixLayoutCreate(&aLayout, dataType, M, K, K)); // ldA, A[M, K]
+    CUBLASLT_CHECK(cublasLtMatrixLayoutCreate(&bLayout, dataType, K, N, N)); // ldB, B[K, N]
+    CUBLASLT_CHECK(cublasLtMatrixLayoutCreate(&cLayout, dataType, M, N, N)); // ldC  C[M, N]
+    CUBLASLT_CHECK(cublasLtMatrixLayoutCreate(&dLayout, dataType, M, N, N)); // ldD  D[M, N]
+
+    CUBLASLT_CHECK(cublasLtMatrixLayoutSetAttribute(aLayout, CUBLASLT_MATRIX_LAYOUT_ORDER, &row_major, sizeof(row_major)));
+    CUBLASLT_CHECK(cublasLtMatrixLayoutSetAttribute(bLayout, CUBLASLT_MATRIX_LAYOUT_ORDER, &row_major, sizeof(row_major)));
+    CUBLASLT_CHECK(cublasLtMatrixLayoutSetAttribute(cLayout, CUBLASLT_MATRIX_LAYOUT_ORDER, &row_major, sizeof(row_major)));
+    CUBLASLT_CHECK(cublasLtMatrixLayoutSetAttribute(dLayout, CUBLASLT_MATRIX_LAYOUT_ORDER, &row_major, sizeof(row_major)));
+
+    // Preference / heuristic
+    cublasLtMatmulPreference_t pref;
+    CUBLASLT_CHECK(cublasLtMatmulPreferenceCreate(&pref));
+    size_t maxWs = 1 << 20; // MB
+    CUBLASLT_CHECK(cublasLtMatmulPreferenceSetAttribute(
+        pref, CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &maxWs, sizeof(maxWs)));
+
+    cublasLtMatmulHeuristicResult_t heuristic;
+    int returned = 0;
+    CUBLASLT_CHECK(cublasLtMatmulAlgoGetHeuristic(
+        lt, opDesc, aLayout, bLayout, cLayout, dLayout,
+        pref, 1, &heuristic, &returned));
+    TORCH_CHECK(returned > 0, "No suitable cuBLASLt matmul algorithm found");
+
+    void* workspace = nullptr;
+    if (heuristic.workspaceSize > 0) {
+        auto ce = cudaMalloc(&workspace, heuristic.workspaceSize);
+        TORCH_CHECK(ce == cudaSuccess, "cudaMalloc workspace failed");
+    }
+
+    const float alpha = 1.0f;
+    const float beta  = 0.0f;
+    const void* Cptr  = nullptr; // we use epilogue to do bias addition because of efficiency, we dont need to allocate C[M, N] buffer
+    
+    CUBLASLT_CHECK(cublasLtMatmul(
+        lt, opDesc,
+        &alpha,
+        A_.data_ptr(), aLayout,
+        B_.data_ptr(), bLayout,
+        &beta,
+        Cptr, cLayout,
+        D.data_ptr(), dLayout,  // D is [OC,N] COL-major aliasing Y[N, OC] row major
+        &heuristic.algo,
+        workspace, heuristic.workspaceSize,
+        stream));
+
+    if (workspace) cudaFree(workspace);
+    cublasLtMatmulPreferenceDestroy(pref);
+    cublasLtMatrixLayoutDestroy(dLayout);
+    cublasLtMatrixLayoutDestroy(cLayout);
+    cublasLtMatrixLayoutDestroy(bLayout);
+    cublasLtMatrixLayoutDestroy(aLayout);
+    cublasLtMatmulDescDestroy(opDesc);
+
+    return D;
+}
+
 }
 
 TORCH_LIBRARY_IMPL(xops, CUDA, m) {
   m.impl("cublaslt_linear", xops::cublaslt_linear);
+  m.impl("cublaslt_matmul", xops::cublaslt_matmul);
 }

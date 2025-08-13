@@ -27,6 +27,7 @@ test_loader  = DataLoader(test_ds,  batch_size=BATCH_SIZE)
 
 # ── 3. Model ───────────────────────────────────────────────────────────────────
 
+# model = TinyViT(linear_impl="cublaslt").to(DEVICE)
 model = TinyViT().to(DEVICE)
 optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 print(model)
@@ -37,7 +38,9 @@ for epoch in range(1, EPOCHS + 1):
     model.train()
     total, correct, loss_sum = 0, 0, 0.0
 
-    for x, y in tqdm(train_loader, desc=f"Epoch {epoch}/{EPOCHS}"):
+    pbar = tqdm(train_loader, desc=f"Epoch {epoch}/{EPOCHS}")
+    # for x, y in tqdm(train_loader, desc=f"Epoch {epoch}/{EPOCHS}"):
+    for x, y in pbar:
         x, y = x.to(DEVICE), y.to(DEVICE)
 
         logits = model(x)
@@ -66,7 +69,7 @@ for epoch in range(1, EPOCHS + 1):
             total   += y.size(0)
     test_acc = 100.0 * correct / total
 
-    print(f"[Epoch {epoch}] train_loss={train_loss:.4f} "
+    print(f"[Epoch {epoch}/{pbar.format_dict['elapsed']:5.1f} s] train_loss={train_loss:.4f} "
           f"train_acc={train_acc:.2f}%  test_acc={test_acc:.2f}%")
 
 print("Done.")
