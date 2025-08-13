@@ -7,7 +7,7 @@ LINEAR_TOLERANCES = [
     # (class, atol)
     (CustomLinear, 1e-5),
     (CudaMMLinear, 1e-5),
-    (CublasltLinear, 1e-4)
+    (CublasltLinear, 1e-5)
 ]
 
 LINEAR_TESTLIST = list(map(lambda t: t[0], LINEAR_TOLERANCES))
