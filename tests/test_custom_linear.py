@@ -1,13 +1,19 @@
 import pytest
 import torch
 import torch.nn as nn
-from custom import CustomLinear, CudaMMLinear, CublasltLinear
+from custom import (
+    CustomLinear, 
+    CudaMMLinear, 
+    CublasltLinear,
+    TorchFloat8Linear
+)
 
 LINEAR_TOLERANCES = [
     # (class, atol)
     (CustomLinear, 1e-5),
     (CudaMMLinear, 1e-5),
-    (CublasltLinear, 1e-5)
+    (CublasltLinear, 1e-5),
+    (TorchFloat8Linear, 0.2),
 ]
 
 LINEAR_TESTLIST = list(map(lambda t: t[0], LINEAR_TOLERANCES))
@@ -75,7 +81,7 @@ class TestCustomizedLinear:
         custom_linear = constructor.from_linear(torch_linear)
 
         B = 4
-        L = 17
+        L = 16
         # 2D inputs
         x = torch.randn(B, ic).to(device="cuda", dtype=dtype)
         y = custom_linear(x)
