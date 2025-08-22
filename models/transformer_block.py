@@ -4,24 +4,6 @@ import os
 import torch
 from torch import nn
 import torch.nn.functional as F
-from custom import (
-    CustomLinear, 
-    AddmmLinear, 
-    CublasltLinear, 
-    CublasltMxfp8Linear,
-    CublasltNvfp4Linear,
-    CublasltFwdNvfp4BwdMxfp8Linear,
-)
-
-LINEAR_IMPL = {
-    "torch": nn.Linear,
-    "custom_py": CustomLinear,
-    "custom_aten": AddmmLinear,
-    "cublaslt": CublasltLinear,
-    "cublaslt_mxfp8": CublasltMxfp8Linear,
-    "cublaslt_nvfp4": CublasltNvfp4Linear, 
-    "cublaslt_nvf4_fw_mxf8_bw": CublasltFwdNvfp4BwdMxfp8Linear,
-}
 
 try:
     import transformer_engine.pytorch as te
@@ -30,7 +12,10 @@ except ImportError:
     Warning("transformer_engine.pytorch is not installed.")
     te = None
 
-REF_IMPL = ["torch", "custom_py", "custom_aten", "cublaslt", "cublaslt_mxfp8", "cublaslt_nvfp4", "cublaslt_nvf4_fw_mxf8_bw"]
+LINEAR_IMPL = {
+    "torch": nn.Linear,
+    "te": te.Linear if te is not None else None, # dont fall back, so that we are aware what is going on
+}
 
 class TransformerBlock(nn.Module):
     def __init__(self, E, F, H, dropout=0.1, impl="torch"):
