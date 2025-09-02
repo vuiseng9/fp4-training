@@ -27,9 +27,8 @@ test_loader  = DataLoader(test_ds,  batch_size=BATCH_SIZE)
 
 # ── 3. Model ───────────────────────────────────────────────────────────────────
 
-model = TinyViT(linear_impl="torch_f8").to(DEVICE)
+model = TinyViT().to(DEVICE)
 # model = TinyViT(linear_impl="cublaslt").to(DEVICE)
-# model = TinyViT().to(DEVICE)
 optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 print(model)
 criterion = nn.CrossEntropyLoss()
