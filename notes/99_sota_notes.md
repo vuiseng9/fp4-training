@@ -67,6 +67,9 @@ Potential value added work
         * blackwell
 
 * To transformer Engine? entailing both recipe and kernel implementation
+* To Torchao
+
+ao-fp-ext (they are coming quick)
 
 ### Questions
 Gaudi-NVFP4
@@ -93,3 +96,8 @@ mxfp4, nvfp4 simulated quantized training for vision transformers
 dev we can use our desktop
 
 how to use huggingface dataset to download
+
+ao-fp4-train
+
+
+https://developer.nvidia.com/blog/boosting-matrix-multiplication-speed-and-flexibility-with-nvidia-cublas-12-9
