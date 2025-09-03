@@ -1,6 +1,6 @@
 from .linear import (
     CustomLinear, 
-    CudaMMLinear, 
+    AddmmLinear, 
     CublasltLinear
 )
 
@@ -10,7 +10,7 @@ from .f8_linear import (
 
 __all__ = [
     "CustomLinear", 
-    "CudaMMLinear", 
+    "AddmmLinear", 
     "CublasltLinear", 
     "TorchFloat8Linear"
 ]

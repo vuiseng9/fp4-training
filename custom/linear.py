@@ -89,9 +89,9 @@ class CustomLinear(torch.nn.Linear):
         return f"IC={self.in_features}, OC={self.out_features}, b={b_str}"
     
 
-class CudaMM(torch.autograd.Function):
+class CudaAtenAddmm(torch.autograd.Function):
     """
-    Custom matrix multiplication function using native pytorch torch.matmul.
+    Custom matrix multiplication function using native torch.addmm.
     Expect 2d by 2d inputs, with optional bias. 
     Intent is to make this code readable, and as template to other custom backend.
     """
@@ -126,7 +126,7 @@ class CudaMM(torch.autograd.Function):
     
     
 
-class CudaMMLinear(CustomLinear):
+class AddmmLinear(CustomLinear):
     """
     Custom linear layer using aten addmm/mm.
     Intentionally for CUDA only.
@@ -136,7 +136,7 @@ class CudaMMLinear(CustomLinear):
         if input.ndim > 2:
             shapes = input.shape
             input = input.view(-1, shapes[-1])
-        out =  CudaMM.apply(input, self.weight, self.bias)
+        out =  CudaAtenAddmm.apply(input, self.weight, self.bias)
         
         if shapes is not None:
             out = out.view(shapes[:-1] + (self.out_features,))
@@ -152,7 +152,7 @@ class CublasltLinearFunc(torch.autograd.Function):
     def forward(ctx, X, W, b=None):
         # no shape checking as it is handled at backend function
 
-        Y = op.cublaslt_linear(W, X, b)  # b can be None or vector
+        Y = op.cublaslt_matmul_bias_epilogue(W, X.T, b)  # b can be None or vector
 
         ctx.save_for_backward(X, W) 
         # we can't save b if it is none. 
@@ -167,10 +167,10 @@ class CublasltLinearFunc(torch.autograd.Function):
         grad_X = grad_W = grad_b = None
 
         if ctx.needs_input_grad[0] is True:
-            grad_X = op.cublaslt_matmul(grad_Y, W)
+            grad_X = op.cublaslt_matmul_xbias(grad_Y, W)
 
         if ctx.needs_input_grad[1] is True:
-            grad_W = op.cublaslt_matmul(grad_Y.T, X)
+            grad_W = op.cublaslt_matmul_xbias(grad_Y.T, X)
 
         if ctx.has_bias and ctx.needs_input_grad[2] is True:
             grad_b = grad_Y.sum(dim=0) # Original bias shape (OC,)

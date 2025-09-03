@@ -5,7 +5,7 @@ from models import TransformerBlock, TinyViT, LINEAR_IMPL
 from custom import CustomLinear
 
 IMPL_TESTLIST = list(LINEAR_IMPL.keys())
-NO_CPU_IMPL = ["te", "custom_aten_mm", "cublaslt"]
+NO_CPU_IMPL = ["te", "custom_aten_mm", "cublaslt", "torch_f8"]
 
 try:
     import transformer_engine.pytorch as te

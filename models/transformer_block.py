@@ -6,7 +6,7 @@ from torch import nn
 import torch.nn.functional as F
 from custom import (
     CustomLinear, 
-    CudaMMLinear, 
+    AddmmLinear, 
     CublasltLinear, 
     TorchFloat8Linear
 )
@@ -21,7 +21,7 @@ LINEAR_IMPL = {
     "torch": nn.Linear,
     "te": te.Linear if te is not None else None, # dont fall back, so that we are aware what is going on
     "custom_py": CustomLinear,
-    "custom_aten_mm": CudaMMLinear,
+    "custom_aten_mm": AddmmLinear,
     "cublaslt": CublasltLinear,
     "torch_f8": TorchFloat8Linear,
 }

@@ -14,6 +14,6 @@ extern "C" PyObject* PyInit_xops(void) {
 
 TORCH_LIBRARY(xops, m) {
   m.def("addmm_cuda(Tensor a, Tensor b, Tensor? c=None) -> Tensor");
-  m.def("cublaslt_linear(Tensor W, Tensor X, Tensor? b=None) -> Tensor"); // expected W[OC, IC], X[N, IC], return [N, OC] == A[x, k], B[y, k], c[x]  B @ A.T = O[y, x]
-  m.def("cublaslt_matmul(Tensor A, Tensor B) -> Tensor");
+  m.def("cublaslt_matmul_bias_epilogue(Tensor row_major_W, Tensor col_major_Xt, Tensor? b=None) -> Tensor"); // expected W[OC, IC] row_major, X.T[IC, N] col_major, return Y[N, OC] row major
+  m.def("cublaslt_matmul_xbias(Tensor any_major_A, Tensor any_major_B) -> Tensor"); // internally forcing row-major layout through .contiguous()
 }

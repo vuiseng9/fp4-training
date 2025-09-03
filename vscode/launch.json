@@ -5,6 +5,48 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "lt-cublas LtNvfp4Matmul",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/root/work/dev/non-te/cuda-lib-samples/lt-cublas/build/LtNvfp4Matmul/sample_cublasLt_LtNvfp4Matmul",
+            "args": [],
+            "stopAtEntry": true,
+            "cwd": "/root/work/dev/non-te/cuda-lib-samples/lt-cublas/LtNvfp4Matmul",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set Disassembly Flavor to Intel",
+                    "text": "-gdb-set disassembly-flavor intel",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "Python dev",
+            "type": "debugpy",
+            "request": "launch",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/quantized-training"
+            },
+            "cwd": "${workspaceFolder}/quantized-training",
+            // "program": "scripts/00_fp32.py",
+            "program": "scripts/01_fp16.py",
+            // "program": "scripts/02_fp8_delayed_scaling.py",
+            // "program": "scripts/03_fp8_current_scaling.py",
+            // "program": "scripts/04_fp8_block_scaling.py",
+            // "program": "scripts/05_mxfp8_block_scaling.py",
+            "args": []
+        },
+        {
             "name": "Launch Python, break at CPP only",
             "type": "cppdbg",
             "request": "launch",
@@ -35,56 +77,5 @@
             ],
             // "preLaunchTask": "build-debug"  // Optional: build your extension first
         },
-        {
-            "name": "i Python debug",
-            "type": "debugpy",
-            "request": "launch",
-            "console": "integratedTerminal",
-            "justMyCode": false,
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}/quantized-training"
-            },
-            "cwd": "${workspaceFolder}/quantized-training",
-            "program": "${file}",
-            "args": []
-        },
-        {
-            "name": "debugpy_launch",
-            "type": "debugpy",
-            "request": "launch",
-            "console": "integratedTerminal",
-            "justMyCode": false,
-            "stopOnEntry": false,
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}/quantized-training"
-            },
-            "cwd": "${workspaceFolder}/quantized-training",
-            "program": "scripts/00_fp32.py",
-            "args": []
-        },
-        {
-            "name": "gdb_attach",
-            "type": "cppdbg",
-            "request": "attach",
-            "program": "/usr/bin/python3",
-            "MIMode": "gdb",
-            "miDebuggerPath": "/usr/bin/gdb",
-            "processId": "${command:pickProcess}",
-            // "processId": "${input:pythonPID}",
-            "setupCommands": [
-                {
-                    "description": "Enable pretty-printing for gdb",
-                    "text": "-enable-pretty-printing",
-                    "ignoreFailures": true
-                },
-            ]
-        },
-    ],
-    "compounds": [
-        {
-            "name": "Compound",
-            "configurations": ["debugpy_launch", "gdb_attach"],
-            "stopAll": true
-        }
-    ],
+    ]
 }
