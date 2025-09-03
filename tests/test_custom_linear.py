@@ -6,7 +6,8 @@ from custom import (
     CustomLinear, 
     AddmmLinear, 
     CublasltLinear,
-    TorchFloat8Linear
+    TorchFloat8Linear,
+    FakeMxfp8Linear,
 )
 
 LINEAR_TOLERANCES = [
@@ -15,6 +16,8 @@ LINEAR_TOLERANCES = [
     (AddmmLinear, 1e-5),
     (CublasltLinear, 1e-5),
     (TorchFloat8Linear, 0.2),
+    (FakeMxfp8Linear, 0.2),
+    
 ]
 
 LINEAR_TESTLIST = list(map(lambda t: t[0], LINEAR_TOLERANCES))

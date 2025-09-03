@@ -8,7 +8,8 @@ from custom import (
     CustomLinear, 
     AddmmLinear, 
     CublasltLinear, 
-    TorchFloat8Linear
+    TorchFloat8Linear,
+    FakeMxfp8Linear
 )
 
 try:
@@ -24,6 +25,8 @@ LINEAR_IMPL = {
     "custom_aten_mm": AddmmLinear,
     "cublaslt": CublasltLinear,
     "torch_f8": TorchFloat8Linear,
+    "fake_mxfp8": FakeMxfp8Linear,
+    # "cublaslt_mxfp8": CublasltMxfp8Linear,
 }
 
 class TransformerBlock(nn.Module):

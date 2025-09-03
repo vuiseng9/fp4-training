@@ -1,0 +1,4 @@
+[submodule "mxfp"]
+	path = mxfp
+	url = https://github.com/vuiseng9/microxcaling
+	branch = main
