@@ -1,4 +1,7 @@
 import torch
+import backend.xops
+op = torch.ops.xops
+
 from mxfp.mx.mx_ops import quantize_mx_op
 from mxfp.mx.specs import MxSpecs
 
@@ -21,17 +24,20 @@ fq_mxfp8_colwise = partial(quantize_mx_op, mx_specs=mxfp8_spec, elem_format='fp8
 
 class FakeMxfp8MatMul(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, X, W, b, quant: OrderedDict):
+    def forward(ctx, X, W, b, quant: OrderedDict, use_cublaslt=False):
         fqX = quant[0](X)
         fqW = quant[1](W)
         
-        # attempt to simulate A=W, B=X.T
-        Y = torch.matmul(fqW, fqX.T).T
+        if use_cublaslt:
+            Y = op.cublaslt_matmul_bias_epilogue(fqW, fqX.T, b)
+        else:
+            # attempt to simulate A=W, B=X.T
+            Y = torch.matmul(fqW, fqX.T).T
 
         ctx.save_for_backward(X, W)
         ctx.quant = quant
         ctx.has_bias = b is not None
-        if b is not None:
+        if b is not None and not use_cublaslt:
             return Y + b
         return Y
     
