@@ -5,6 +5,106 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "CUDA C++: Launch",
+            "type": "cuda-gdb",
+            "request": "launch",
+            "program": "/usr/bin/python3",
+            // "args": ["one_te_linear.py"],
+            "args": ["scripts/05_mxfp8_block_scaling.py"],
+            // "args": ["scripts/03_fp8_current_scaling.py"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/quantized-training",
+            "environment": [
+                {
+                    "name": "PYTHONPATH",
+                    "value": "${workspaceFolder}/quantized-training"
+                },
+                // {
+                //     "name": "CUBLASLT_LOG_LEVEL",
+                //     "value": "5"
+                // },
+                // {
+                //     "name": "CUBLASLT_LOG_MASK",
+                //     "value": "31"
+                // }
+            ]
+        },
+        {
+            "name": "Py MXFP8 (hack for NVFP4)",
+            "type": "debugpy",
+            "request": "launch",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/quantized-training",
+                // "CUBLASLT_LOG_LEVEL": "5",
+                // "CUBLASLT_LOG_MASK": "31"
+            },
+            "cwd": "${workspaceFolder}/quantized-training",
+            // "program": "one_te_linear.py",
+            "program": "scripts/05_mxfp8_block_scaling.py",
+            "args": []
+        },
+        {
+            "name": "vs-py",
+            "type": "debugpy",
+            "request": "launch",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {},
+            "cwd": "${workspaceFolder}",
+            "program": "${file}",
+            "args": []
+        },
+        {
+            "name": "nvfp4 matmul",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/root/work/dev/qt-fp4/cuda-lib-samples/lt-cublas/build/LtNvfp4Matmul/sample_cublasLt_LtNvfp4Matmul",
+            "args": [],
+            "stopAtEntry": true,
+            "cwd": "/root/work/dev/qt-fp4/cuda-lib-samples/lt-cublas/LtNvfp4Matmul",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set Disassembly Flavor to Intel",
+                    "text": "-gdb-set disassembly-flavor intel",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "mxfp8 matmul",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/root/work/dev/qt-fp4/cuda-lib-samples/lt-cublas/build/LtMxfp8Matmul/sample_cublasLt_LtMxfp8Matmul",
+            "args": [],
+            "stopAtEntry": true,
+            "cwd": "/root/work/dev/qt-fp4/cuda-lib-samples/lt-cublas/LtMxfp8Matmul",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set Disassembly Flavor to Intel",
+                    "text": "-gdb-set disassembly-flavor intel",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
             "name": "Launch Python, break at CPP only",
             "type": "cppdbg",
             "request": "launch",
@@ -16,7 +116,15 @@
                 {
                     "name": "PYTHONPATH",
                     "value": "${workspaceFolder}/quantized-training"
-                }
+                },
+                // {
+                //     "name": "CUBLASLT_LOG_LEVEL",
+                //     "value": "5"
+                // },
+                // {
+                //     "name": "CUBLASLT_LOG_MASK",
+                //     "value": "31"
+                // }
             ],
             "externalConsole": false,
             "MIMode": "gdb",  // or "lldb" on macOS
@@ -46,6 +154,20 @@
             },
             "cwd": "${workspaceFolder}/quantized-training",
             "program": "${file}",
+            "args": []
+        },
+
+        {
+            "name": "Py MXFP8",
+            "type": "debugpy",
+            "request": "launch",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/quantized-training"
+            },
+            "cwd": "${workspaceFolder}/quantized-training",
+            "program": "scripts/dt-05_mxfp8_block_scaling.py",
             "args": []
         },
         {

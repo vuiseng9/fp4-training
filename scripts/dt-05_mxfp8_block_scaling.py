@@ -11,7 +11,6 @@ from transformer_engine.common import recipe
 
 # ── 1. Hyper-params ────────────────────────────────────────────────────────────
 BATCH_SIZE   = 64
-# BATCH_SIZE   = 192
 EPOCHS       = int(os.getenv("NEPOCH", 3))
 LR           = 1e-3
 DEVICE       = "cuda" if torch.cuda.is_available() else "cpu"
@@ -35,7 +34,7 @@ print(model)
 optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 criterion = nn.CrossEntropyLoss()
 fp8_recipe = recipe.MXFP8BlockScaling()
-# fp8_recipe = recipe.NVFP4BlockScaling()
+
 # ── 4. Training loop ───────────────────────────────────────────────────────────
 for epoch in range(1, EPOCHS + 1):
     model.train()
