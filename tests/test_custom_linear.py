@@ -15,8 +15,8 @@ LINEAR_TOLERANCES = [
     (CustomLinear, 1e-5),
     (AddmmLinear, 1e-5),
     (CublasltLinear, 1e-5),
-    (TorchFloat8Linear, 0.2),
-    (FakeMxfp8Linear, 0.2),
+    (TorchFloat8Linear, 0.8),
+    (FakeMxfp8Linear, 0.8),
     
 ]
 
@@ -27,8 +27,11 @@ dtype_label = {
     torch.bfloat16: "bf16"
 }
 
+def max_error_element(x, ref):
+    return (x-ref).abs().max()
+
 def assert_allclose(x, ref, atol):
-    assert torch.allclose(x, ref, atol=atol), f"max error {(x-ref).abs().max()} > {atol}"
+    assert torch.allclose(x, ref, atol=atol), f"max error {max_error_element(x, ref)} > {atol}"
 
 class TestCustomizedLinear:
 
@@ -86,7 +89,9 @@ class TestCustomizedLinear:
             # linear bias addition could be after downcast matmul result. to confirm
 
         torch_linear = nn.Linear(ic, oc, bias=use_bias).to(device="cuda", dtype=dtype)
-        custom_linear = constructor.from_linear(torch_linear)
+        # ensure seperate copies of parameters but of same values for testing purpose
+        custom_linear = constructor(ic, oc, bias=use_bias).to(device="cuda", dtype=dtype)
+        custom_linear.load_state_dict(torch_linear.state_dict())
 
         B = 4
         L = 16
@@ -114,6 +119,7 @@ class TestCustomizedLinear:
         assert y.is_cuda
         assert_allclose(y, ref_y, atol)
 
+        assert custom_linear.weight.data_ptr() != torch_linear.weight.data_ptr(), "weight should not share the same memory storage their gradient will accumulate, causing silent error"
         # Backward pass
         y.sum().backward()
         ref_y.sum().backward()

@@ -1,6 +1,8 @@
 
 import torch
 import backend.xops
+import warnings
+warnings.simplefilter("once", UserWarning)   # warn once per callsite
 
 op = torch.ops.xops
 
@@ -152,7 +154,7 @@ class CublasltLinearFunc(torch.autograd.Function):
     def forward(ctx, X, W, b=None):
         # no shape checking as it is handled at backend function
 
-        Y = op.cublaslt_matmul_bias_epilogue(W, X.T, b)  # b can be None or vector
+        Y = op.cublaslt_mm_fp32_or_bf16(0, W, X, b)  # b can be None or vector
 
         ctx.save_for_backward(X, W) 
         # we can't save b if it is none. 
@@ -164,20 +166,24 @@ class CublasltLinearFunc(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_Y):
         X, W = ctx.saved_tensors
+        
+        assert X.is_contiguous(), "X must be contiguous, they are by default, find out why it is not"
+        assert W.is_contiguous(), "W must be contiguous, they are by default, find out why it is n"
+        warnings.warn(f"grad_Y.is_contiguous()={grad_Y.is_contiguous()}, it is expected to be non-contiguous, stride(0,0), to contiguous()")
+        grad_Y = grad_Y.contiguous()
+        
         grad_X = grad_W = grad_b = None
 
         if ctx.needs_input_grad[0] is True:
-            grad_X = op.cublaslt_matmul_xbias(grad_Y, W)
+            grad_X = op.cublaslt_mm_fp32_or_bf16(1, W, grad_Y, None)
 
         if ctx.needs_input_grad[1] is True:
-            grad_W = op.cublaslt_matmul_xbias(grad_Y.T, X)
+            grad_W = op.cublaslt_mm_fp32_or_bf16(2, X, grad_Y, None)
 
         if ctx.has_bias and ctx.needs_input_grad[2] is True:
             grad_b = grad_Y.sum(dim=0) # Original bias shape (OC,)
 
         return grad_X, grad_W, grad_b
-    
-    
 
 class CublasltLinear(CustomLinear):
     """

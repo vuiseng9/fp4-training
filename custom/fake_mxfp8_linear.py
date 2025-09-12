@@ -1,4 +1,7 @@
 import torch
+import warnings
+warnings.simplefilter("once", UserWarning)   # warn once per callsite
+
 import backend.xops
 op = torch.ops.xops
 
@@ -44,6 +47,11 @@ class FakeMxfp8MatMul(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_Y):
         X, W = ctx.saved_tensors
+
+        assert X.is_contiguous(), "X must be contiguous, they are by default, find out why it is not"
+        assert W.is_contiguous(), "W must be contiguous, they are by default, find out why it is n"
+        warnings.warn(f"grad_Y.is_contiguous()={grad_Y.is_contiguous()}, it is expected to be non-contiguous, stride(0,0), to contiguous()")
+        grad_Y = grad_Y.contiguous()
 
         grad_X = grad_W = grad_b = None
 
