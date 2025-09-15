@@ -5,7 +5,37 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "vs-py",
+            "name": "interactive debugpy",
+            "type": "debugpy",
+            "request": "launch",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "CUBLASLT_LOG_LEVEL": "2",
+                // "CUBLASLT_LOG_LEVEL": "5",
+                // "CUBLASLT_LOG_MASK": "31",
+            },
+            "cwd": "${workspaceFolder}",
+            "program": "${file}",
+            "args": []
+        },
+        {
+            "name": "mxfp8 f8e4m3 dout",
+            "type": "debugpy",
+            "request": "launch",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "CUBLASLT_LOG_LEVEL": "2",
+                // "CUBLASLT_LOG_LEVEL": "5",
+                // "CUBLASLT_LOG_MASK": "31",
+            },
+            "cwd": "${workspaceFolder}/quantized-training/",
+            "program": "tests/dev_cublaslt_mm_mxfp8_f8e4m3_dout.py",
+            "args": []
+        },
+        {
+            "name": "swizzle",
             "type": "debugpy",
             "request": "launch",
             "console": "integratedTerminal",
@@ -40,7 +70,7 @@
             ]
         },
         {
-            "name": "Python dev",
+            "name": "Python Train Mnist/TinyVit",
             "type": "debugpy",
             "request": "launch",
             "console": "integratedTerminal",
@@ -65,7 +95,21 @@
             "args": []
         },
         {
-            "name": "Launch Python, break at CPP only",
+            "name": "LtMxfp8Matmul",
+            "type": "cuda-gdb",
+            "request": "launch",
+            "stopAtEntry": true,
+            "environment": [
+                {
+                    "name": "CUBLASLT_LOG_LEVEL",
+                    "value": "2"
+                }
+            ],
+            "cwd": "/root/work/dev/vsqt/CUDALibrarySamples/lt-cublas/LtMxfp8Matmul",
+            "program": "/root/work/dev/vsqt/CUDALibrarySamples/lt-cublas/build/LtMxfp8Matmul/sample_cublasLt_LtMxfp8Matmul",
+        },
+        {
+            "name": "[CPP] Launch Python, break at CPP only",
             "type": "cppdbg",
             "request": "launch",
             "program": "/usr/bin/python3",  // or path to your Python interpreter
@@ -106,5 +150,6 @@
             ],
             // "preLaunchTask": "build-debug"  // Optional: build your extension first
         },
+
     ]
 }

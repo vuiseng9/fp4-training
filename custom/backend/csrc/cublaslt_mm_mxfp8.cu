@@ -63,6 +63,10 @@ static void ensure_cublaslt_cache_configured() {
     });
 }
 
+inline int64_t roundoff(int64_t  x, int64_t granul) {
+    return granul * ((x + (granul - 1)) / granul);
+}
+
 inline bool is_A_transposed(int mode) {
     switch (mode) {
         case 0: return true;   // TN (fwd)
@@ -96,7 +100,7 @@ inline c_dout_dtype map_c_dout_cuda_dtype(at::ScalarType t) {
     }
 }
 
-at::Tensor cublaslt_mm_mxfp8(
+std::tuple<at::Tensor, at::Tensor> cublaslt_mm_mxfp8(
     const int64_t mode, 
     const at::ScalarType DoutType,
     const at::Tensor& A, const at::Tensor& scaleA,
@@ -147,6 +151,14 @@ at::Tensor cublaslt_mm_mxfp8(
     const auto kB = isTransB ? B.size(0) : B.size(1);
     const auto n  = isTransB ? B.size(1) : B.size(0);
     TORCH_CHECK(k == kB, "Mismatch matmul inner: A's k = ", k, ", B's k =", kB);
+
+    if (DoutType == at::kByte) {  // when dout it uint8 alias to f8_e4m3
+        TORCH_CHECK(
+            (m % 32) == 0,
+            "When Dout is FP8 (stored as uint8), batch size m must be a multiple of 32; got m=",
+            m, "."
+        );
+    }
 
     at::Tensor bias_;
     at::ScalarType bias_dtype;
@@ -232,7 +244,16 @@ at::Tensor cublaslt_mm_mxfp8(
     // [Not applicable, for nvfp4] CUBLASLT_MATMUL_DESC_D_SCALE_POINTER - If not specified, or set to NULL, the scaling factor is assumed to be 1
     
     // D out matrix and scaling factor ------------------------------------------------------------------------------------------------------
-    CUBLASLT_CHECK(cublasLtMatmulDescSetAttribute(opDesc, CUBLASLT_MATMUL_DESC_D_OUT_SCALE_MODE, &scaleType_f32,  sizeof(scaleType_f32)));
+    at::Tensor scaleDout;
+    if (dout_dtype == CUDA_R_8F_E4M3) {
+        // scaleDout must fit to tile size 4x128 (To verify on layout, unswizzle)
+        scaleDout = at::empty_strided({ roundoff(m/32, 4), roundoff(n, 128) }, {n, 1}, scaleA.options()); // force contiguous row-major although scaleA is row-major as well
+        __nv_fp8_e8m0 *scaleDout_ptr = static_cast<__nv_fp8_e8m0 *>(scaleDout.data_ptr());
+        CUBLASLT_CHECK(cublasLtMatmulDescSetAttribute(opDesc, CUBLASLT_MATMUL_DESC_D_OUT_SCALE_MODE,    &scaleType_e8m0, sizeof(scaleType_e8m0)));
+        CUBLASLT_CHECK(cublasLtMatmulDescSetAttribute(opDesc, CUBLASLT_MATMUL_DESC_D_OUT_SCALE_POINTER, &scaleDout_ptr,  sizeof(scaleDout_ptr)));
+    } else {
+        CUBLASLT_CHECK(cublasLtMatmulDescSetAttribute(opDesc, CUBLASLT_MATMUL_DESC_D_OUT_SCALE_MODE, &scaleType_f32,  sizeof(scaleType_f32)));
+    }
     // CUBLASLT_MATMUL_DESC_D_OUT_SCALE_POINTER ? keep default for now.
     CUBLASLT_CHECK(cublasLtMatrixLayoutCreate(&DoutLayout, dout_dtype, m,  n, m)); // D[m,n]
 
@@ -295,7 +316,7 @@ at::Tensor cublaslt_mm_mxfp8(
     cublasLtMatrixLayoutDestroy(ALayout);
     cublasLtMatmulDescDestroy(opDesc);
 
-    return Dt;
+    return {Dt, scaleDout};
 }
 }
 

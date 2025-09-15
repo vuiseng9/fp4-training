@@ -40,7 +40,7 @@ class Mxfp8MatMul(torch.autograd.Function):
 
         # Call the CUDA extension with autocast disabled to avoid any hidden casts (because it has been casted)
         with autocast(device_type="cuda", enabled=False):
-            Y = op.cublaslt_mm_mxfp8(
+            Y, _ = op.cublaslt_mm_mxfp8(
                 TransMatAB.TN.value,
                 X.dtype,
                 Wq, scaleW_swizzled, 
@@ -69,7 +69,7 @@ class Mxfp8MatMul(torch.autograd.Function):
             grad_Yq, scaleY_swizzled = ctx.quant['2B'](grad_Y)
             
             with autocast(device_type="cuda", enabled=False):
-                grad_X = op.cublaslt_mm_mxfp8(
+                grad_X, _ = op.cublaslt_mm_mxfp8(
                     TransMatAB.NN.value, 
                     grad_Y.dtype,
                     Wq, scaleW_swizzled, 
@@ -80,7 +80,7 @@ class Mxfp8MatMul(torch.autograd.Function):
             Xq,      scaleX_swizzled = ctx.quant['3A'](X.to(grad_Y.dtype))
             grad_Yq, scaleY_swizzled = ctx.quant['3B'](grad_Y)
             
-            grad_W = op.cublaslt_mm_mxfp8(
+            grad_W, _ = op.cublaslt_mm_mxfp8(
                 TransMatAB.NT.value, 
                 grad_Y.dtype,
                 Xq, scaleX_swizzled, 
