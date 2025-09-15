@@ -5,25 +5,11 @@ warnings.simplefilter("once", UserWarning)   # warn once per callsite
 import backend.xops
 op = torch.ops.xops
 
-from mxfp.mx.mx_ops import quantize_mx_op
-from mxfp.mx.specs import MxSpecs
-
 from functools import partial
 from collections import OrderedDict
 
 from .linear import CustomLinear
-
-mxfp8_spec = MxSpecs({
-    'scale_bits': 8,           # Bits for shared exponent/scale
-    'block_size': 32,           # Block size for shared scaling
-    'shared_exp_method': 'max',         # Use max value in block for scaling
-    'round': 'nearest',                 # Rounding mode
-    'mx_flush_fp32_subnorms': False,    # Don't flush subnormal FP32 values
-    'custom_cuda': False,               # Use PyTorch implementation
-})
-
-fq_mxfp8_rowwise = partial(quantize_mx_op, mx_specs=mxfp8_spec, elem_format='fp8_e4m3', block_size=mxfp8_spec['block_size'], axes=[-1])
-fq_mxfp8_colwise = partial(quantize_mx_op, mx_specs=mxfp8_spec, elem_format='fp8_e4m3', block_size=mxfp8_spec['block_size'], axes=[-2])
+from .quantize import fq_mxfp8_rowwise, fq_mxfp8_colwise
 
 class FakeMxfp8MatMul(torch.autograd.Function):
     @staticmethod

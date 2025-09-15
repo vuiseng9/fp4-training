@@ -8,6 +8,7 @@ from custom import (
     CublasltLinear,
     TorchFloat8Linear,
     FakeMxfp8Linear,
+    CublasltMxfp8Linear
 )
 
 LINEAR_TOLERANCES = [
@@ -17,6 +18,7 @@ LINEAR_TOLERANCES = [
     (CublasltLinear, 1e-5),
     (TorchFloat8Linear, 0.8),
     (FakeMxfp8Linear, 0.8),
+    (CublasltMxfp8Linear, 0.8), 
     
 ]
 
@@ -78,8 +80,8 @@ class TestCustomizedLinear:
             assert (custom_linear.bias == torch_linear.bias).all()
 
     @pytest.mark.parametrize("use_bias", [True, False], ids=lambda x: "xbias" if not x else "bias")
-    @pytest.mark.parametrize("oc", [16, 32, 128], ids=lambda x: f"{x}.oc")
-    @pytest.mark.parametrize("ic", [16, 32, 256], ids=lambda x: f"{x}.ic")
+    @pytest.mark.parametrize("oc", [32, 64, 128], ids=lambda x: f"{x}.oc")
+    @pytest.mark.parametrize("ic", [64, 32, 256], ids=lambda x: f"{x}.ic")
     @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16], ids=lambda x: dtype_label.get(x))
     @pytest.mark.parametrize("constructor_tol", LINEAR_TOLERANCES, ids=lambda x: x[0].__name__ + f"-{x[1]}")
     def test_fwd_bwd_cuda(self, ic, oc, use_bias, dtype, constructor_tol):

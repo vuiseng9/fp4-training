@@ -12,7 +12,7 @@
             "justMyCode": false,
             "env": {},
             "cwd": "${workspaceFolder}",
-            "program": "${file}",
+            "program": "quantized-training/custom/swizzle.py",
             "args": []
         },
         {
@@ -46,11 +46,16 @@
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {
-                "PYTHONPATH": "${workspaceFolder}/quantized-training"
+                "PYTHONPATH": "${workspaceFolder}/quantized-training",
+                // "CUBLASLT_LOG_LEVEL": "2",
+                // "CUBLASLT_LOG_LEVEL": "5",
+                // "CUBLASLT_LOG_MASK": "31",
             },
             "cwd": "${workspaceFolder}/quantized-training",
-            // "program": "scripts/101_custom_mxfp8.py",
-            "program": "scripts/100_custom_fp32.py",
+            "program": 
+            // "scripts/102_custom_cublaslt_mxfp8_bf16.py",
+            "scripts/102_custom_cublaslt_mxfp8_fp32.py",
+            // "program": "scripts/100_custom_fp32.py",
             // "program": "scripts/00_fp32.py",
             // "program": "scripts/01_fp16.py",
             // "program": "scripts/02_fp8_delayed_scaling.py",
@@ -64,14 +69,25 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "/usr/bin/python3",  // or path to your Python interpreter
-            "args": ["scripts/05_mxfp8_block_scaling.py"],
+            "args": [
+                // "scripts/102_custom_cublaslt_mxfp8_bf16.py",
+                "scripts/102_custom_cublaslt_mxfp8_fp32.py"
+            ],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/quantized-training",
+            "cwd": "/root/work/dev/vsqt/quantized-training",
             "environment": [
                 {
                     "name": "PYTHONPATH",
                     "value": "${workspaceFolder}/quantized-training"
-                }
+                },
+                // {
+                //     "name": "CUBLASLT_LOG_LEVEL",
+                //     "value": "5"
+                // },
+                // {
+                //     "name": "CUBLASLT_LOG_MASK",
+                //     "value": "31"
+                // }
             ],
             "externalConsole": false,
             "MIMode": "gdb",  // or "lldb" on macOS

@@ -12,10 +12,15 @@ from .fake_mxfp8_linear import (
     FakeMxfp8Linear
 )
 
+from .mxfp8_linear import (
+    CublasltMxfp8Linear
+)
+
 __all__ = [
     "CustomLinear", 
     "AddmmLinear", 
     "CublasltLinear", 
     "TorchFloat8Linear",
-    "FakeMxfp8Linear"
+    "FakeMxfp8Linear",
+    "CublasltMxfp8Linear"
 ]
