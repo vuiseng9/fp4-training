@@ -83,8 +83,9 @@
             },
             "cwd": "${workspaceFolder}/quantized-training",
             "program": 
+            "scripts/202_custom_triton_mxfp8_fp32.py",
             // "scripts/102_custom_cublaslt_mxfp8_bf16.py",
-            "scripts/102_custom_cublaslt_mxfp8_fp32.py",
+            // "scripts/102_custom_cublaslt_mxfp8_fp32.py",
             // "program": "scripts/100_custom_fp32.py",
             // "program": "scripts/00_fp32.py",
             // "program": "scripts/01_fp16.py",
