@@ -7,6 +7,7 @@ from triton.tools.mxfp import MXFP4Tensor, MXScaleTensor
 
 from custom.quantize import _q_mxfp8_rowwise, _q_mxfp8_colwise
 from functools import partial
+# from ...mxfp8_linear import TransMatAB
 
 def ceilto(x, div):
     return ((x + div - 1) // div) * div
@@ -24,18 +25,21 @@ def pad_to_multiple_of_128x4tile(scale_2d):
 def ceilto(n, block_dim):
     return ((n + block_dim - 1) // block_dim) * block_dim
 
-def tile_matrix(tensor, ty, tx):
-    # pad to tile boundary, return 5D tensor 
+def tile_matrix(tensor, ty, tx, return_tiled=True):
+    # pad to tile boundary, return 4D tensor 
     if tensor.shape[0] % ty != 0 or tensor.shape[1] % tx != 0:
         padded = torch.zeros((ceilto(tensor.shape[0], ty), ceilto(tensor.shape[1], tx)), dtype=tensor.dtype, device=tensor.device)
         padded[:tensor.shape[0], :tensor.shape[1]] = tensor
         tensor = padded
     
-    tiled = tensor.view(tensor.shape[0]//ty, ty, tensor.shape[1]//tx, tx).permute(0,2,1,3).unsqueeze(dim=0).contiguous()
-    return tiled
+    if return_tiled is True:
+        return tensor.view(tensor.shape[0]//ty, ty, tensor.shape[1]//tx, tx).permute(0,2,1,3).contiguous()
+    return tensor
 
 tile_128x4 = partial(tile_matrix, ty=128, tx=4)
 tile_4x128 = partial(tile_matrix, ty=4, tx=128)
+
+pad_to_multiple = partial(tile_matrix, return_tiled=False)
 
 def q_mxfp8(tensor, rowwise=True):
     if tensor.ndim != 2:
@@ -52,6 +56,10 @@ def q_mxfp8(tensor, rowwise=True):
     # biasing scale
     scale += 127
     scale = scale.to(torch.uint8).contiguous()
+    if rowwise:
+        scale = tile_128x4(scale)
+    else:
+        scale = tile_4x128(scale)
     return q_tensor, scale
 
 quantize_rowwise = partial(q_mxfp8, rowwise=True)
@@ -100,7 +108,7 @@ def block_scaled_matmul_kernel(  #
     if output_type == 0:
         output_dtype = tl.float32
     elif output_type == 1:
-        output_dtype = tl.float16
+        output_dtype = tl.bfloat16
     elif output_type == 2:
         output_dtype = tl.float8e4nv
 
@@ -146,88 +154,100 @@ KERNELCFG = {
 }
 
 
-def mxfp8_matmul_NT(A, B, dtype_dst):
-    # A: (M, K) FP32
-    # B: (N, K) FP32
-    if dtype_dst == torch.float32:
-        dtype_dst_id = 0
-    elif dtype_dst == torch.float16:
-        dtype_dst_id = 1
-    elif dtype_dst == torch.float8_e4m3fn:
-        dtype_dst_id = 2
-    else:
-        raise ValueError(f"Unsupported dtype: {dtype_dst}")
-    
-    rep_m, rep_n, rep_k = 1, 2, 1
-    a_scale_block_shape = [1, rep_m, rep_k, 2, 256]
-    b_scale_block_shape = [1, rep_n, rep_k, 2, 256]
+def mxfp8_matmul_NT(A, scaleA, B, scaleB, out_dtype):
+    # A: (M, K) row-major, e4m3fn, M multiple of 128 
+    # B: (N, K) row-major, e4m3fn, N multiple of 256
+    # K multiple of 128
+    # scaleA: (tiley, tilex, 128, 4), row-major uint8, i.e. tiles of 128x4
+    # scaleB: (tiley, tilex, 128, 4), row-major uint8, i.e. tiles of 128x4
+    # dtype_dst: torch.float32, torch.float16, torch.float8_e4m
 
+    if out_dtype == torch.float32:
+        dtype_dst_id = 0
+    elif out_dtype == torch.bfloat16:
+        dtype_dst_id = 1
+    else:
+        raise ValueError(f"Unsupported dtype: {out_dtype}")
+    
+    assert A.is_contiguous(), "A must be contiguous"
+    assert B.is_contiguous(), "B must be contiguous"
+    assert A.dtype == torch.float8_e4m3fn, f"A must be e4m3fn, found {A.dtype}"
+    assert B.dtype == torch.float8_e4m3fn, f"B must be e4m3fn, found {B.dtype}"
+    assert A.ndim == 2, f"A must be 2D, found A.ndim={A.ndim}"
+    assert B.ndim == 2, f"B must be 2D, found B.ndim={B.ndim}"
+    
     configs = KERNELCFG
     BLOCK_M = configs["BLOCK_SIZE_M"]
     BLOCK_N = configs["BLOCK_SIZE_N"]
     BLOCK_K = configs["BLOCK_SIZE_K"]
-    VEC_SIZE = configs["VEC_SIZE"]
 
-    assert A.is_contiguous(), "A must be contiguous"
-    assert B.is_contiguous(), "B must be contiguous"
     M = A.shape[0]
     K = A.shape[1]
     N = B.shape[0]
-    assert A.shape[1] == B.shape[1], "Incompatible inner dimensions"
-    assert M % BLOCK_M == 0, "M must be multiple of BLOCK_SIZE_M"
-    assert N % BLOCK_N == 0, "N must be multiple of BLOCK_SIZE_N"
-    assert K % BLOCK_K == 0, "K must be multiple of BLOCK_SIZE_K"
+    assert A.shape[1] == B.shape[1], f"Incompatible inner dimensions: {A.shape[1]} vs {B.shape[1]}"
+    assert M % BLOCK_M == 0, f"M dim of A must be multiple of BLOCK_SIZE_M: found {M} % {BLOCK_M}"
+    assert N % BLOCK_N == 0, f"N dim of B must be multiple of BLOCK_SIZE_N: found {N} % {BLOCK_N}"
+    assert K % BLOCK_K == 0, f"K dim must be multiple of BLOCK_SIZE_K: found {K} % {BLOCK_K}"
 
-    Aq, scaleA = quantize_rowwise(A)
-    Bq, scaleB = quantize_rowwise(B)
+    assert scaleA.is_contiguous(), "A must be contiguous"
+    assert scaleB.is_contiguous(), "B must be contiguous"
+    assert scaleA.ndim == 4, f"scaleA must be 4D, found scaleA.ndim={scaleA.ndim}"
+    assert scaleB.ndim == 4, f"scaleB must be 4D, found scaleB.ndim={scaleB.ndim}"
+    assert scaleA.dtype == torch.uint8, f"scaleA must be uint8 (e8m0), found {scaleA.dtype}"
+    assert scaleB.dtype == torch.uint8, f"scaleB must be uint8 (e8m0), found {scaleB.dtype}"
+    assert scaleA.shape[2] == 128 and scaleA.shape[3] == 4, f"scaleA must be tiled in 128x4, found scaleA.shape={scaleA.shape}"
+    assert scaleB.shape[2] == 128 and scaleB.shape[3] == 4, f"scaleB must be tiled in 128x4, found scaleB.shape={scaleB.shape}"
 
-    a_desc = TensorDescriptor.from_tensor(Aq, [BLOCK_M, BLOCK_K])
-    b_desc = TensorDescriptor.from_tensor(Bq, [BLOCK_N, BLOCK_K])
 
-    tiled_scaleA = tile_128x4(scaleA)
-    tiled_scaleA = tiled_scaleA.reshape(tiled_scaleA.shape[:3] + (2, 256))
+    rep_m, rep_n, rep_k = 1, 2, 1
+    a_scale_block_shape = [1, rep_m, rep_k, 2, 256]
+    b_scale_block_shape = [1, rep_n, rep_k, 2, 256]
 
-    tiled_scaleB = tile_128x4(scaleB)
-    tiled_scaleB = tiled_scaleB.reshape(tiled_scaleB.shape[:3] + (2, 256))
+    a_desc = TensorDescriptor.from_tensor(A, [BLOCK_M, BLOCK_K])
+    b_desc = TensorDescriptor.from_tensor(B, [BLOCK_N, BLOCK_K])
 
+    tiled_scaleA = scaleA.reshape((1,) + scaleA.shape[:2] + (2, 256))
+    tiled_scaleB = scaleB.reshape((1,) + scaleB.shape[:2] + (2, 256))
     a_scale_desc = TensorDescriptor.from_tensor(tiled_scaleA, block_shape=a_scale_block_shape)
     b_scale_desc = TensorDescriptor.from_tensor(tiled_scaleB, block_shape=b_scale_block_shape)
 
-    output = torch.empty((M, N), dtype=dtype_dst, device="cuda")
+    output = torch.empty((M, N), dtype=out_dtype, device="cuda")
     c_desc = TensorDescriptor.from_tensor(output, [BLOCK_M, BLOCK_N])
 
     grid = (triton.cdiv(M, BLOCK_M) * triton.cdiv(N, BLOCK_N), 1)
     block_scaled_matmul_kernel[grid](
-        a_desc,
-        a_scale_desc,
-        b_desc,
-        b_scale_desc,
+        a_desc, a_scale_desc,
+        b_desc, b_scale_desc,
         c_desc,
-        M,
-        N,
-        K,
-        dtype_dst_id,
+        M, N, K, dtype_dst_id,
         configs["ELEM_PER_BYTE_A"],
         configs["ELEM_PER_BYTE_B"],
         configs["VEC_SIZE"],
         configs["BLOCK_SIZE_M"],
         configs["BLOCK_SIZE_N"],
         configs["BLOCK_SIZE_K"],
-        rep_m,
-        rep_n,
-        rep_k,
+        rep_m, rep_n, rep_k,
         configs["num_stages"],
     )
     return output
 
 
 if __name__ == "__main__":
-    M, N, K = 8192, 4096, 1024
-    A = torch.rand((M, K), dtype=torch.float16, device="cuda")
-    B = torch.rand((N, K), dtype=torch.float16, device="cuda")
+    # M, N, K = 128, 256, 512
+    # M, N, K = 128, 64, 1088
+    # M, N, K = 8192, 4096, 1024
+    M, N, K = 512, 256, 768
+    A = torch.rand((M, K), dtype=torch.bfloat16, device="cuda")
+    B = torch.rand((N, K), dtype=torch.bfloat16, device="cuda")
 
     C_ref = torch.matmul(A, B.T)
-    C = mxfp8_matmul_NT(A, B, torch.float16)
 
-    torch.testing.assert_close(C_ref, C.to(torch.float16), atol=0.0, rtol=5e-2)
+    Aq, scaleA = quantize_rowwise(A)
+    Bq, scaleB = quantize_rowwise(B)
+
+    C = mxfp8_matmul_NT(Aq, scaleA, Bq, scaleB, torch.bfloat16)
+
+    torch.testing.assert_close(C_ref, C, atol=0.0, rtol=5e-2)
     print("pass.")
+    print("joto")
+ 
