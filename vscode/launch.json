@@ -11,13 +11,63 @@
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {
-                "CUBLASLT_LOG_LEVEL": "2",
+                // "CUBLASLT_LOG_LEVEL": "2",
                 // "CUBLASLT_LOG_LEVEL": "5",
                 // "CUBLASLT_LOG_MASK": "31",
             },
             "cwd": "${workspaceFolder}",
             "program": "${file}",
             "args": []
+        },
+        {
+            "name": "01 VecAdd",
+            "type": "debugpy",
+            "request": "launch",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {},
+            "cwd": "${workspaceFolder}/tuts-xptops/201-triton/tutorials",
+            "program": "01-vector-add.py",
+            "args": [
+                "--format", "mxfp8", // "nvfp4", "mxfp8", "mixed"
+                "-K", "128",
+                // "--K_range", "128", "128", 
+                // "--bench"
+            ]
+        },
+        {
+            "name": "03 MatMul",
+            "type": "debugpy",
+            "request": "launch",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {},
+            "cwd": "${workspaceFolder}/tuts-xptops/201-triton/tutorials",
+            "program": "03-matrix-multiplication.py",
+            "args": [
+                "--format", "mxfp8", // "nvfp4", "mxfp8", "mixed"
+                "-K", "128",
+                // "--K_range", "128", "128", 
+                // "--bench"
+            ]
+        },
+        {
+            "name": "10 scaled_mm",
+            "type": "debugpy",
+            "request": "launch",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {},
+            "cwd": "${workspaceFolder}/tuts-xptops/201-triton/tutorials",
+            "program": 
+                // "10-block-scaled-matmul.py",
+                "mxfp8-10-block-scaled-matmul.py",
+            "args": [
+                "--format", "mxfp8", // "nvfp4", "mxfp8", "mixed"
+                "-K", "128",
+                // "--K_range", "128", "128", 
+                // "--bench"
+            ]
         },
         {
             "name": "mxfp8 f8e4m3 dout",
@@ -70,7 +120,7 @@
             ]
         },
         {
-            "name": "Python Train Mnist/TinyVit",
+            "name": "Train TinyVit/Mnist",
             "type": "debugpy",
             "request": "launch",
             "console": "integratedTerminal",
@@ -83,7 +133,7 @@
             },
             "cwd": "${workspaceFolder}/quantized-training",
             "program": 
-            "scripts/202_custom_triton_mxfp8_fp32.py",
+            "scripts/203_custom_triton_mxfp8_bf16.py",
             // "scripts/102_custom_cublaslt_mxfp8_bf16.py",
             // "scripts/102_custom_cublaslt_mxfp8_fp32.py",
             // "program": "scripts/100_custom_fp32.py",

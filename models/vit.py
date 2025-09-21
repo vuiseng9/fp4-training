@@ -19,7 +19,7 @@ class TinyViT(nn.Module):
         patch_size=7,
         in_chans=1,
         num_classes=10,
-        embed_dim=64,
+        embed_dim=256,
         num_heads=4,
         mlp_ratio=2.0,
         linear_impl="torch"

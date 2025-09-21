@@ -1,7 +1,7 @@
 from setuptools import setup, Extension
 from torch.utils import cpp_extension
 import os
-os.environ.setdefault("TORCH_CUDA_ARCH_LIST", "12.0")
+os.environ["TORCH_CUDA_ARCH_LIST"] = "12.0"
 
 # Debug flags for C++
 cpp_debug_flags = [

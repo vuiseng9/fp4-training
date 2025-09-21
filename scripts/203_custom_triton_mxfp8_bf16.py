@@ -32,6 +32,10 @@ model = TinyViT(linear_impl="triton_mxfp8").to(DEVICE)
 optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 print(model)
 criterion = nn.CrossEntropyLoss()
+print(model)
+
+use_amp = (DEVICE == "cuda")
+amp_dtype = torch.bfloat16  # BF16 training (no GradScaler needed)
 
 # ── 4. Training loop ───────────────────────────────────────────────────────────
 for epoch in range(1, EPOCHS + 1):
@@ -43,8 +47,9 @@ for epoch in range(1, EPOCHS + 1):
     for x, y in pbar:
         x, y = x.to(DEVICE), y.to(DEVICE)
 
-        logits = model(x)
-        loss   = criterion(logits, y)
+        with torch.autocast(device_type="cuda", dtype=amp_dtype, enabled=use_amp):
+            logits = model(x)
+            loss   = criterion(logits, y)
 
         optimizer.zero_grad()
         loss.backward()

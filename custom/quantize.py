@@ -21,7 +21,7 @@ fq_mxfp8_colwise = partial(quantize_mx_op, mx_specs=mxfp8_spec, elem_format='fp8
 _q_mxfp8_rowwise = partial(quantize_mx_op, mx_specs=mxfp8_spec, elem_format='fp8_e4m3', block_size=mxfp8_spec['block_size'], axes=[-1], expand_and_reshape=True, return_quantized=True)
 _q_mxfp8_colwise = partial(quantize_mx_op, mx_specs=mxfp8_spec, elem_format='fp8_e4m3', block_size=mxfp8_spec['block_size'], axes=[-2], expand_and_reshape=True, return_quantized=True)
 
-def q_mxfp8_rowwise(tensor):
+def q_mxfp8_rowwise(tensor, swizzle=True):
     if tensor.ndim != 2:
         raise ValueError("Input tensor must be 2D for mxfp8 quantization")
 
@@ -29,13 +29,14 @@ def q_mxfp8_rowwise(tensor):
     q_tensor, scale = _q_mxfp8_rowwise(tensor)
     q_tensor = q_tensor.view(orig_shape).to(torch.float8_e4m3fn).contiguous().view(torch.uint8) # _q_mxfp8_rowwise is in per mx block, need to flatten
     
-    # biasing scale
-    scale += 127
-    scale = scale.to(torch.uint8)
-    scale = swizzle_rowwise_scale(scale)
+    if swizzle:
+        # biasing scale
+        scale += 127
+        scale = scale.to(torch.uint8)
+        scale = swizzle_rowwise_scale(scale)
     return q_tensor, scale
 
-def q_mxfp8_colwise(tensor):
+def q_mxfp8_colwise(tensor, swizzle=True):
     if tensor.ndim != 2:
         raise ValueError("Input tensor must be 2D for mxfp8 quantization")
 
@@ -43,10 +44,11 @@ def q_mxfp8_colwise(tensor):
     q_tensor, scale = _q_mxfp8_colwise(tensor)
     q_tensor = q_tensor.view(orig_shape).to(torch.float8_e4m3fn).contiguous().view(torch.uint8) # _q_mxfp8_colwise is in per mx block, need to flatten
 
-    # biasing scale
-    scale += 127
-    scale = scale.to(torch.uint8)
-    swiz_scale = swizzle_colwise_scale(scale)
+    if swizzle:
+        # biasing scale
+        scale += 127
+        scale = scale.to(torch.uint8)
+        swiz_scale = swizzle_colwise_scale(scale)
     return q_tensor, swiz_scale
 
 if __name__ == "__main__":

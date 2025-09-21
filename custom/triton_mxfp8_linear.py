@@ -2,6 +2,10 @@ from enum import Enum
 import torch
 from torch.amp import custom_fwd, custom_bwd, autocast
 
+from triton.tools.tensor_descriptor import TensorDescriptor
+from triton.tools.mxfp import MXScaleTensor
+from .triton.block_scaled_matmul import block_scaled_matmul
+
 import backend.xops
 op = torch.ops.xops
 
@@ -13,6 +17,10 @@ from collections import OrderedDict
 
 from .linear import CustomLinear
 from .quantize import q_mxfp8_rowwise, q_mxfp8_colwise
+
+from backend.triton.mxfp8 import quantize_rowwise as triton_q_mxfp8_rowwise
+from backend.triton.mxfp8 import quantize_colwise as triton_q_mxfp8_colwise
+from backend.triton.mxfp8 import mxfp8_matmul_NT 
 
 def raise_if_not_contiguous(tensor, name):
     if not tensor.is_contiguous():
@@ -29,28 +37,30 @@ class DoutType(Enum):
     F32 = torch.float32
     BF16 = torch.bfloat16
     F8 = torch.float8_e4m3fn
-class Mxfp8MatMul(torch.autograd.Function):
+
+class TritonMxfp8MatMul(torch.autograd.Function):
     @staticmethod
     @custom_fwd(device_type="cuda", cast_inputs=torch.bfloat16)  
     # makes *incoming* tensors BF16, meaning X, W, b will be casted to BF16 if autocast is enabled. 
     # Implication input to quantization is bf16. Stick to this for now, need deeper understanding of autocast.
     def forward(ctx, X, W, b, quant: OrderedDict):
-        Wq, scaleW_swizzled = quant['1A'](W)
-        Xq, scaleX_swizzled = quant['1B'](X)
+        Wq, scaleW = quant['1A'](W)
+        Xq, scaleX = quant['1B'](X) # X is in row-major, need to be transposed to col-major for better memory access
 
-        # Call the CUDA extension with autocast disabled to avoid any hidden casts (because it has been casted)
         with autocast(device_type="cuda", enabled=False):
-            Y, _ = op.cublaslt_mm_mxfp8(
-                TransMatAB.TN.value,
-                X.dtype,
-                Wq, scaleW_swizzled, 
-                Xq, scaleX_swizzled,
-                b)
+            Y = mxfp8_matmul_NT(Wq, scaleW, Xq, scaleX, X.dtype)
+        # Call the CUDA extension with autocast disabled to avoid any hidden casts (because it has been casted)
+        #     Y, _ = op.cublaslt_mm_mxfp8(
+        #         TransMatAB.TN.value,
+        #         X.dtype,
+        #         Wq, scaleW_swizzled, 
+        #         Xq, scaleX_swizzled,
+        #         b)
 
         ctx.save_for_backward(X, W)
         ctx.quant = quant
         ctx.has_bias = b is not None
-        return Y
+        return Y.T.contiguous()
     
     @staticmethod
     @custom_bwd(device_type="cuda")
@@ -111,8 +121,8 @@ class TritonMxfp8Linear(CustomLinear):
     
     def _init_quantizers(self):
         self.quantizers = OrderedDict()
-        self.quantizers['1A'] = q_mxfp8_rowwise # W/IC
-        self.quantizers['1B'] = q_mxfp8_rowwise # X/IC
+        self.quantizers['1A'] = triton_q_mxfp8_rowwise # W/IC
+        self.quantizers['1B'] = triton_q_mxfp8_rowwise # X/IC
         self.quantizers['2A'] = q_mxfp8_colwise # W/OC
         self.quantizers['2B'] = q_mxfp8_rowwise # dY/OC
         self.quantizers['3A'] = q_mxfp8_colwise # X/N
@@ -123,7 +133,7 @@ class TritonMxfp8Linear(CustomLinear):
         if input.ndim > 2:
             shapes = input.shape
             input = input.view(-1, shapes[-1])
-        out =  Mxfp8MatMul.apply(input, self.weight, self.bias, self.quantizers)
+        out =  TritonMxfp8MatMul.apply(input, self.weight, self.bias, self.quantizers)
 
         if shapes is not None:
             out = out.view(shapes[:-1] + (self.out_features,))

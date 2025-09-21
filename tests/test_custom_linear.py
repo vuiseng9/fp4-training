@@ -8,7 +8,8 @@ from custom import (
     CublasltLinear,
     TorchFloat8Linear,
     FakeMxfp8Linear,
-    CublasltMxfp8Linear
+    CublasltMxfp8Linear,
+    TritonMxfp8Linear
 )
 
 LINEAR_TOLERANCES = [
@@ -19,6 +20,7 @@ LINEAR_TOLERANCES = [
     (TorchFloat8Linear, 0.8),
     (FakeMxfp8Linear, 0.8),
     (CublasltMxfp8Linear, 0.8), 
+    (TritonMxfp8Linear, 0.8)
     
 ]
 
@@ -105,6 +107,7 @@ class TestCustomizedLinear:
         assert y.shape == (B, oc)
         assert y.dtype == dtype
         assert y.is_cuda
+        print(max_error_element(y, ref_y))
         assert_allclose(y, ref_y, atol)
 
         # 3D inputs
