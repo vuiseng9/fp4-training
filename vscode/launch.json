@@ -11,13 +11,29 @@
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {
-                "CUBLASLT_LOG_LEVEL": "2",
+                // "CUBLASLT_LOG_LEVEL": "2",
                 // "CUBLASLT_LOG_LEVEL": "5",
                 // "CUBLASLT_LOG_MASK": "31",
             },
-            "cwd": "${workspaceFolder}",
+            "cwd": "${workspaceFolder}/quantized-training/custom",
             "program": "${file}",
             "args": []
+        },
+        {
+            "name": "triton - scaled_mm",
+            "type": "debugpy",
+            "request": "launch",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {},
+            "cwd": "${workspaceFolder}/tuts-xptops/201-triton/tutorials",
+            "program": "10-block-scaled-matmul.py",
+            "args": [
+                "--format", "nvfp4", // "nvfp4", "mxfp8", "mixed"
+                "--no-bench"
+                // "--K_range", "128", "128",
+                // "-K", "128",
+            ]
         },
         {
             "name": "mxfp8 f8e4m3 dout",
@@ -46,30 +62,6 @@
             "args": []
         },
         {
-            "name": "lt-cublas LtNvfp4Matmul",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "/root/work/dev/non-te/cuda-lib-samples/lt-cublas/build/LtNvfp4Matmul/sample_cublasLt_LtNvfp4Matmul",
-            "args": [],
-            "stopAtEntry": true,
-            "cwd": "/root/work/dev/non-te/cuda-lib-samples/lt-cublas/LtNvfp4Matmul",
-            "environment": [],
-            "externalConsole": false,
-            "MIMode": "gdb",
-            "setupCommands": [
-                {
-                    "description": "Enable pretty-printing for gdb",
-                    "text": "-enable-pretty-printing",
-                    "ignoreFailures": true
-                },
-                {
-                    "description": "Set Disassembly Flavor to Intel",
-                    "text": "-gdb-set disassembly-flavor intel",
-                    "ignoreFailures": true
-                }
-            ]
-        },
-        {
             "name": "Python Train Mnist/TinyVit",
             "type": "debugpy",
             "request": "launch",
@@ -83,17 +75,35 @@
             },
             "cwd": "${workspaceFolder}/quantized-training",
             "program": 
-            "scripts/104_custom_cublaslt_nvfp4_fp32.py",
+            // "scripts/one_te_linear.py",
+            // "scripts/107_custom_cublaslt_nvfp4_mixed_bf16.py",
+            // "scripts/106_custom_cublaslt_nvfp4_mixed_fp32.py",
+            "scripts/105_custom_cublaslt_fwd_nvfp4_bwd_mxfp8_mixed_bf16.py",
+            // "scripts/104_custom_cublaslt_fwd_nvfp4_bwd_mxfp8_mixed_fp32.py",
             // "scripts/102_custom_cublaslt_mxfp8_bf16.py",
             // "scripts/102_custom_cublaslt_mxfp8_fp32.py",
             // "program": "scripts/100_custom_fp32.py",
-            // "program": "scripts/00_fp32.py",
-            // "program": "scripts/01_fp16.py",
-            // "program": "scripts/02_fp8_delayed_scaling.py",
-            // "program": "scripts/03_fp8_current_scaling.py",
-            // "program": "scripts/04_fp8_block_scaling.py",
             // "program": "scripts/05_mxfp8_block_scaling.py",
+            // "program": "scripts/04_fp8_block_scaling.py",
+            // "program": "scripts/03_fp8_current_scaling.py",
+            // "program": "scripts/02_fp8_delayed_scaling.py",
+            // "program": "scripts/01_fp16.py",
+            // "program": "scripts/00_fp32.py",
             "args": []
+        },
+        {
+            "name": "LtNvfp4Matmul",
+            "type": "cuda-gdb",
+            "request": "launch",
+            "stopAtEntry": true,
+            "environment": [
+                {
+                    "name": "CUBLASLT_LOG_LEVEL",
+                    "value": "2"
+                }
+            ],
+            "cwd": "/root/work/dev/vsqt/CUDALibrarySamples/lt-cublas/LtNvfp4Matmul",
+            "program": "/root/work/dev/vsqt/CUDALibrarySamples/lt-cublas/build/LtNvfp4Matmul/sample_cublasLt_LtNvfp4Matmul",
         },
         {
             "name": "LtMxfp8Matmul",
@@ -115,12 +125,15 @@
             "request": "launch",
             "program": "/usr/bin/python3",  // or path to your Python interpreter
             "args": [
+                "scripts/one_te_linear.py",
+                // "scripts/106_custom_cublaslt_nvfp4_mixed_fp32.py",
+                // "tests/dev_cublaslt_mm_nvfp4_dout.py",
                 // "scripts/102_custom_cublaslt_mxfp8_bf16.py",
                 // "scripts/102_custom_cublaslt_mxfp8_fp32.py",
-                "scripts/104_custom_cublaslt_nvfp4_fp32.py"
+                // "scripts/104_custom_cublaslt_nvfp4_fp32.py"
             ],
             "stopAtEntry": false,
-            "cwd": "/root/work/dev/vsqt/quantized-training",
+            "cwd": "/root/work/dev/fp4prod/quantized-training",
             "environment": [
                 {
                     "name": "PYTHONPATH",

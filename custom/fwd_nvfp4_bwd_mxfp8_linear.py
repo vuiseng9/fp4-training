@@ -22,7 +22,7 @@ def raise_if_not_contiguous(tensor, name):
         raise ValueError(f"{name} must be contiguous, but got shape {tensor.shape} and stride {tensor.stride()}")
 
 
-class Nvfp4Matmul(torch.autograd.Function):
+class FwdNvfp4BwdMxfp8Matmul(torch.autograd.Function):
     @staticmethod
     @custom_fwd(device_type="cuda", cast_inputs=torch.bfloat16)  
     # makes *incoming* tensors BF16, meaning X, W, b will be casted to BF16 if autocast is enabled. 
@@ -58,33 +58,26 @@ class Nvfp4Matmul(torch.autograd.Function):
         grad_X = grad_W = grad_b = None
 
         if ctx.needs_input_grad[0] is True:
-            # brute force for TN layout
-            Wt = W.to(grad_Y.dtype).T.contiguous()
-
-            Wtq,     scaleWt_swizzled = ctx.quant['2A'](Wt)
-            grad_Yq, scaleY_swizzled  = ctx.quant['2B'](grad_Y)
+            Wq,      scaleW_swizzled = ctx.quant['2A'](W.to(grad_Y.dtype))
+            grad_Yq, scaleY_swizzled = ctx.quant['2B'](grad_Y)
             
             with autocast(device_type="cuda", enabled=False):
-                grad_X, _ = op.cublaslt_mm_nvfp4(
-                    TransMatAB.TN.value, 
+                grad_X, _ = op.cublaslt_mm_mxfp8(
+                    TransMatAB.NN.value, 
                     grad_Y.dtype,
-                    Wtq,     scaleWt_swizzled,
+                    Wq, scaleW_swizzled, 
                     grad_Yq, scaleY_swizzled,
                     None)
 
         if ctx.needs_input_grad[1] is True:
-            # brute force for TN layout
-            Xt = X.to(grad_Y.dtype).T.contiguous()
-            grad_Yt = grad_Y.T.contiguous()
-
-            Xtq,      scaleXt_swizzled = ctx.quant['3A'](Xt)
-            grad_Ytq, scaleYt_swizzled = ctx.quant['3B'](grad_Yt)
-
-            grad_W, _ = op.cublaslt_mm_nvfp4(
-                TransMatAB.TN.value,
+            Xq,      scaleX_swizzled = ctx.quant['3A'](X.to(grad_Y.dtype))
+            grad_Yq, scaleY_swizzled = ctx.quant['3B'](grad_Y)
+            
+            grad_W, _ = op.cublaslt_mm_mxfp8(
+                TransMatAB.NT.value, 
                 grad_Y.dtype,
-                Xtq,      scaleXt_swizzled, 
-                grad_Ytq, scaleYt_swizzled,
+                Xq, scaleX_swizzled, 
+                grad_Yq, scaleY_swizzled,
                 None)
 
 
@@ -94,7 +87,7 @@ class Nvfp4Matmul(torch.autograd.Function):
         return grad_X, grad_W, grad_b, None
 
 
-class CublasltNvfp4Linear(CustomLinear):
+class CublasltFwdNvfp4BwdMxfp8Linear(CustomLinear):
     """
     Linear Layer with 
         forward using cublasLt nvfp4 gemm
@@ -114,17 +107,17 @@ class CublasltNvfp4Linear(CustomLinear):
         self.quantizers = OrderedDict()
         self.quantizers['1A'] = q_nvfp4_rowwise # W/IC
         self.quantizers['1B'] = q_nvfp4_rowwise # X/IC
-        self.quantizers['2A'] = q_nvfp4_rowwise # Wt/OC
-        self.quantizers['2B'] = q_nvfp4_rowwise # dY/OC
-        self.quantizers['3A'] = q_nvfp4_rowwise # X/N
-        self.quantizers['3B'] = q_nvfp4_rowwise # dYt/N
+        self.quantizers['2A'] = q_mxfp8_colwise # W/OC
+        self.quantizers['2B'] = q_mxfp8_rowwise # dY/OC
+        self.quantizers['3A'] = q_mxfp8_colwise # X/N
+        self.quantizers['3B'] = q_mxfp8_colwise # dY/N
 
     def forward(self, input):
         shapes = None
         if input.ndim > 2:
             shapes = input.shape
             input = input.view(-1, shapes[-1])
-        out =  Nvfp4Matmul.apply(input, self.weight, self.bias, self.quantizers)
+        out =  FwdNvfp4BwdMxfp8Matmul.apply(input, self.weight, self.bias, self.quantizers)
 
         if shapes is not None:
             out = out.view(shapes[:-1] + (self.out_features,))

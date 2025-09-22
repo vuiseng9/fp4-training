@@ -7,6 +7,9 @@
 #include <ATen/cuda/CUDAContext.h>
 #include <c10/cuda/CUDAGuard.h> 
 #include <cublasLt.h>
+#include <cuda_fp4.h>
+
+#define NV_VEC_SIZE 16
 
 inline const char* cublasStatusToString(cublasStatus_t s) {
     switch (s) {
@@ -94,10 +97,88 @@ inline c_dout_dtype map_c_dout_cuda_dtype(at::ScalarType t) {
     switch (t) {
         case at::ScalarType::Float:    return {CUDA_R_32F,  CUDA_R_32F};
         case at::ScalarType::BFloat16: return {CUDA_R_16BF, CUDA_R_16BF};
-        case at::ScalarType::Byte:     return {CUDA_R_16BF, CUDA_R_8F_E4M3}; 
+        case at::ScalarType::Byte:     return {CUDA_R_16BF, CUDA_R_4F_E2M1}; 
         default:
             TORCH_CHECK(false, "Only torch.float32, torch.bfloat16 and torch.uint8 (will be mapped to e4m3) are supported for Dout; but found ", t);
     }
+}
+
+
+
+
+template <typename T>
+struct Pack2;
+
+// float32 specialization
+template <>
+struct Pack2<float> {
+  __device__ static __nv_fp4x2_storage_t
+  convert(const float* row_ptr, int c0,
+          __nv_fp4_interpretation_t kind, cudaRoundMode rmode)
+  {
+    // load two floats
+    float2 f2 = make_float2(row_ptr[c0 + 0], row_ptr[c0 + 1]);
+    // pack to FP4x2
+    return __nv_cvt_float2_to_fp4x2(f2, kind, rmode);
+  }
+};
+
+// bfloat16 specialization
+template <>
+struct Pack2<__nv_bfloat16> {
+  __device__ static __nv_fp4x2_storage_t
+  convert(const __nv_bfloat16* row_ptr, int c0,
+          __nv_fp4_interpretation_t kind, cudaRoundMode rmode)
+  {
+    // Load two bf16 as a vector. We assume N is even so c0 is even-step.
+    // If you're worried about strict-aliasing/alignment, use memcpy into __nv_bfloat162.
+    __nv_bfloat162 b2 = *reinterpret_cast<const __nv_bfloat162*>(row_ptr + c0);
+
+    // Convert to raw representation required by the intrinsic
+    __nv_bfloat162_raw b2_raw = reinterpret_cast<const __nv_bfloat162_raw&>(b2);
+
+    // Direct BF16(raw) -> FP4x2 conversion
+    return __nv_cvt_bfloat16raw2_to_fp4x2(b2_raw, kind, rmode);
+  }
+};
+
+template <typename T>
+__global__ void pack_rowwise_to_2xfp4(
+    const T* __restrict__ in,   // [nrow, ncol]
+    uint8_t* __restrict__ out,  // [nrow, ncol/2] bytes (each byte = 2 fp4)
+    int nrow, int ncol, 
+    __nv_fp4_interpretation_t kind, 
+    cudaRoundMode rmode)
+{
+  int row = blockIdx.y;
+  int pair_idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (row >= nrow) return;
+
+  int pairs_per_row = ncol >> 1;
+  if (pair_idx >= pairs_per_row) return;
+
+  int c0 = pair_idx << 1;                   
+  const T* row_ptr = in + row * ncol;       
+
+  __nv_fp4x2_storage_t packed = Pack2<T>::convert(row_ptr, c0, kind, rmode);
+
+  out[row * pairs_per_row + pair_idx] = reinterpret_cast<uint8_t&>(packed);
+}
+
+inline unsigned bit_floor_u32(unsigned x) {
+    if (x == 0) return 0;
+    return 1u << (31 - __builtin_clz(x));  // host builtin
+}
+
+inline dim3 make_block(unsigned pairs_per_row) {
+    if (pairs_per_row == 0) return dim3(1,1,1);
+    unsigned bx = std::min(256u, std::max(1u, bit_floor_u32(pairs_per_row)));
+    return dim3(bx, 1, 1);
+}
+
+inline dim3 make_grid(int nrow, int pairs_per_row, dim3 block) {
+    int gx = (pairs_per_row + block.x - 1) / block.x;
+    return dim3(gx, nrow, 1);
 }
 
 std::tuple<at::Tensor, at::Tensor> cublaslt_mm_nvfp4(
@@ -106,16 +187,18 @@ std::tuple<at::Tensor, at::Tensor> cublaslt_mm_nvfp4(
     const at::Tensor& A, const at::Tensor& scaleA,
     const at::Tensor& B, const at::Tensor& scaleB,
     const c10::optional<at::Tensor>& bias) {
-    // A and B are row major torch.float8_e4m3fn will be treated as col-major by cublaslt.
+    // A and B are post-quantized data in torch.float32 or bfloat32 which will be casted to fp4 and byte-packed internally here.
+    // A and B are row-major  will be treated as col-major by cublaslt.
+    // scaleA and scaleB are row-major uint8 tensor and must have been sizzled. they are reinterpret as e4m3.
+
     // mode value 0 for forward gemm           cublaslt layout interpretation: TN (both col-m) from pytorch, A=W, B=X  (both row-m)
+    // IMPORTANT: FP4 only supports TN layout in cublaslt, so is CUTLASS. We raise error but keeping the interface.
     // mode value 1 for backward gemm gradX    cublaslt layout interpretation: NN (both col-m) from pytorch, A=W, B=dY (both row-m)
     // mode value 2 for backward gemm gradW    cublaslt layout interpretation: NT (both col-m) from pytorch, A=X, B=dY (both row-m)
-    // scaleA and scaleB are row-major uint8 tensor and must be sizzled. they are reinterpret as e8m0. 
 
-    // Supports Dout/C=fp32
-    //          Dout/C=fp32 or bf16
-    //          Dout=e4m3 C=bf16
+    // Supports Dout: fp32 or bf16 or e2m1
 
+    TORCH_CHECK(mode == 0, "NVFP4 limitation: Only TN layout is supported");
     CHECK_CUDA(A); CHECK_CUDA(B); CHECK_CUDA(scaleA); CHECK_CUDA(scaleB);
     TORCH_CHECK(A.device() == B.device(), "A and B must be on the same CUDA device");
     TORCH_CHECK(scaleA.device() == scaleB.device(), "scaleA and scaleB must be on the same CUDA device");
@@ -124,12 +207,15 @@ std::tuple<at::Tensor, at::Tensor> cublaslt_mm_nvfp4(
     CHECK_CONTIGUOUS(A); CHECK_CONTIGUOUS(B); CHECK_CONTIGUOUS(scaleA); CHECK_CONTIGUOUS(scaleB);
     // TODO!!! check dimension of scaleA & scaleB
     
+    // Different to MXFP8, A & B won't be in fp4 yet, we will pack here, e.g. 2 float32/bf16 to 1 byte made up of 2 fp4
+    // therefore, we check against pre-quantized type. note that the values are in FP4
     const auto el_type = A.scalar_type();
-    TORCH_CHECK((el_type == c10::ScalarType::Byte), "Only supports torch.uint8 (will be reinterpreted as e4m3) for A; but found ", el_type);
+    TORCH_CHECK((el_type == at::ScalarType::Float || el_type == at::ScalarType::BFloat16), "Only supports torch.float32/bfloat16 (will be cast to e2m1 and pack 2x into a byte of e4m3) for A; but found ", el_type);
     TORCH_CHECK(A.scalar_type() == B.scalar_type(), "A and B must be of the same dtype");
     
+    // Scaling Factor Type of NVFP4 is e4m3.
     const auto scale_type = scaleA.scalar_type();
-    TORCH_CHECK((scale_type == c10::ScalarType::Byte), "Only supports torch.uint8 (will be reinterpreted as e8m0) for scaleA; but found ", scale_type);
+    TORCH_CHECK((scale_type == c10::ScalarType::Byte), "Only supports torch.uint8 (will be reinterpreted as e4m3) for scaleA; but found ", scale_type);
     TORCH_CHECK(scaleA.scalar_type() == scaleB.scalar_type(), "scaleA and scaleB must be of the same dtype");
 
     const bool isTransA = is_A_transposed(mode);
@@ -152,11 +238,11 @@ std::tuple<at::Tensor, at::Tensor> cublaslt_mm_nvfp4(
     const auto n  = isTransB ? B.size(1) : B.size(0);
     TORCH_CHECK(k == kB, "Mismatch matmul inner: A's k = ", k, ", B's k =", kB);
 
-    if (DoutType == at::kByte) {  // when dout it uint8 alias to f8_e4m3
+    // TODO(fp4-last)
+    if (DoutType == at::kByte) {  // when dout it uint8 alias to 2x e2m1
         TORCH_CHECK(
-            (m % 32) == 0,
-            "When Dout is FP8 (stored as uint8), batch size m must be a multiple of 32; got m=",
-            m, "."
+            (m % NV_VEC_SIZE) == 0,
+            "When Dout is e2m1 (stored as uint8), batch size m must be a multiple of 16; got m=", m, "."
         );
     }
 
@@ -183,6 +269,42 @@ std::tuple<at::Tensor, at::Tensor> cublaslt_mm_nvfp4(
     c10::cuda::CUDAGuard guard(A.device());
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
 
+    // Packing Tensor A and B ----------------------------------------------------------------------------------
+    TORCH_CHECK((k % 2) == 0, "k must be even (pad horizontally if needed).");
+    int64_t pairs_per_row = k >> 1;
+    at::Tensor packedA = at::empty({m, pairs_per_row}, A.options().dtype(at::kByte));
+    dim3 block = make_block(pairs_per_row);
+    dim3 grid  = make_grid(m, pairs_per_row, block);
+    
+    if (el_type == at::ScalarType::Float) {
+        pack_rowwise_to_2xfp4<<<grid, block, 0, stream>>>(
+            A.data_ptr<float>(), packedA.data_ptr<uint8_t>(),
+            (int)m, (int)k, __NV_E2M1, cudaRoundNearest
+        );
+    } else {
+        pack_rowwise_to_2xfp4<__nv_bfloat16><<<grid, block, 0, stream>>>(
+            reinterpret_cast<__nv_bfloat16*>(B.data_ptr<at::BFloat16>()), 
+            packedA.data_ptr<uint8_t>(),
+            (int)m, (int)k, __NV_E2M1, cudaRoundNearest
+        );
+    }
+
+    at::Tensor packedB = at::empty({n, pairs_per_row}, B.options().dtype(at::kByte));
+    grid  = make_grid(n, pairs_per_row, block);
+
+    if (el_type == at::ScalarType::Float) {
+        pack_rowwise_to_2xfp4<<<grid, block, 0, stream>>>(
+            B.data_ptr<float>(), packedB.data_ptr<uint8_t>(),
+            (int)n, (int)k, __NV_E2M1, cudaRoundNearest
+        );
+    } else {
+        pack_rowwise_to_2xfp4<__nv_bfloat16><<<grid, block, 0, stream>>>(
+            reinterpret_cast<__nv_bfloat16*>(B.data_ptr<at::BFloat16>()), 
+            packedB.data_ptr<uint8_t>(),
+            (int)n, (int)k, __NV_E2M1, cudaRoundNearest
+        );
+    }
+
     // Use PyTorch's pooled cuBLASLt handle (don't create/destroy yourself)
     cublasLtHandle_t lt = at::cuda::getCurrentCUDABlasLtHandle();
     
@@ -202,8 +324,8 @@ std::tuple<at::Tensor, at::Tensor> cublaslt_mm_nvfp4(
     // CUBLASLT_MATMUL_DESC_SCALE_TYPE is for alpha and beta, default value depends on CUBLASLT_MATMUL_DESC_COMPUTE_TYPE. 
     // Keeping default type for now. opDesc has initialized a scale type.
 
-    // mxfp8 A/B scaling factors are of fp8_e8m0, C/D can be fp32 scalar 
-    cublasLtMatmulMatrixScale_t scaleType_e8m0 = CUBLASLT_MATMUL_MATRIX_SCALE_VEC32_UE8M0;
+    // nvfp4 A/B scaling factors are of fp8_e4m3, C/D can be fp32 scalar 
+    cublasLtMatmulMatrixScale_t scaleType_e4m3 = CUBLASLT_MATMUL_MATRIX_SCALE_VEC16_UE4M3;
     cublasLtMatmulMatrixScale_t scaleType_f32  = CUBLASLT_MATMUL_MATRIX_SCALE_SCALAR_32F;
     // A, B, C, Dout layout descriptor 
     // use default column major; therefore no need to set CUBLASLT_MATRIX_LAYOUT_ORDER
@@ -212,19 +334,19 @@ std::tuple<at::Tensor, at::Tensor> cublaslt_mm_nvfp4(
     // A matrix and scaling factor ----------------------------------------------------------------------------------------------------------
     cublasOperation_t transA = isTransA ? CUBLAS_OP_T : CUBLAS_OP_N; 
     CUBLASLT_CHECK(cublasLtMatmulDescSetAttribute(opDesc, CUBLASLT_MATMUL_DESC_TRANSA, &transA, sizeof(transA)));
-    CUBLASLT_CHECK(cublasLtMatrixLayoutCreate(&ALayout, CUDA_R_8F_E4M3, isTransA? k:m, isTransA? m:k, isTransA? k:m)); // A[m,k] ; A.T[k,m]
-    
-    __nv_fp8_e8m0 *scaleA_ptr = static_cast<__nv_fp8_e8m0 *>(scaleA.data_ptr());
-    CUBLASLT_CHECK(cublasLtMatmulDescSetAttribute(opDesc, CUBLASLT_MATMUL_DESC_A_SCALE_MODE,    &scaleType_e8m0, sizeof(scaleType_e8m0)));
+    CUBLASLT_CHECK(cublasLtMatrixLayoutCreate(&ALayout, CUDA_R_4F_E2M1, isTransA? k:m, isTransA? m:k, isTransA? k:m)); // A[m,k] ; A.T[k,m]
+
+    __nv_fp8_e4m3 *scaleA_ptr = static_cast<__nv_fp8_e4m3 *>(scaleA.data_ptr());
+    CUBLASLT_CHECK(cublasLtMatmulDescSetAttribute(opDesc, CUBLASLT_MATMUL_DESC_A_SCALE_MODE,    &scaleType_e4m3, sizeof(scaleType_e4m3)));
     CUBLASLT_CHECK(cublasLtMatmulDescSetAttribute(opDesc, CUBLASLT_MATMUL_DESC_A_SCALE_POINTER, &scaleA_ptr,     sizeof(scaleA_ptr)));
     
     // B matrix and scaling factor ----------------------------------------------------------------------------------------------------------
     cublasOperation_t transB = isTransB ? CUBLAS_OP_T : CUBLAS_OP_N; 
     CUBLASLT_CHECK(cublasLtMatmulDescSetAttribute(opDesc, CUBLASLT_MATMUL_DESC_TRANSB, &transB, sizeof(transB)));
-    CUBLASLT_CHECK(cublasLtMatrixLayoutCreate(&BLayout, CUDA_R_8F_E4M3, isTransB? n:k, isTransB? k:n, isTransB? n:k)); // B[k,n] ; B.T[n,k]
-    
-    __nv_fp8_e8m0 *scaleB_ptr = static_cast<__nv_fp8_e8m0 *>(scaleB.data_ptr());
-    CUBLASLT_CHECK(cublasLtMatmulDescSetAttribute(opDesc, CUBLASLT_MATMUL_DESC_B_SCALE_MODE,    &scaleType_e8m0, sizeof(scaleType_e8m0)));
+    CUBLASLT_CHECK(cublasLtMatrixLayoutCreate(&BLayout, CUDA_R_4F_E2M1, isTransB? n:k, isTransB? k:n, isTransB? n:k)); // B[k,n] ; B.T[n,k]
+
+    __nv_fp8_e4m3 *scaleB_ptr = static_cast<__nv_fp8_e4m3 *>(scaleB.data_ptr());
+    CUBLASLT_CHECK(cublasLtMatmulDescSetAttribute(opDesc, CUBLASLT_MATMUL_DESC_B_SCALE_MODE,    &scaleType_e4m3, sizeof(scaleType_e4m3)));
     CUBLASLT_CHECK(cublasLtMatmulDescSetAttribute(opDesc, CUBLASLT_MATMUL_DESC_B_SCALE_POINTER, &scaleB_ptr,     sizeof(scaleB_ptr)));
     
     // C matrix and scaling factor ----------------------------------------------------------------------------------------------------------
@@ -232,24 +354,29 @@ std::tuple<at::Tensor, at::Tensor> cublaslt_mm_nvfp4(
     // But its configs are dependant on Dout choice.
     // e.g. Dout=fp32, C=fp32
     //      Dout=bf16, C=bf16
-    //      Dout=e4m3, C=bf16
+    //      Dout=e2m1, C=bf16
     auto [c_dtype, dout_dtype] = map_c_dout_cuda_dtype(DoutType);
     const void* Cptr  = nullptr; // we use epilogue to do bias addition because of efficiency, we dont need to allocate C[M, N] buffer
     CUBLASLT_CHECK(cublasLtMatmulDescSetAttribute(opDesc, CUBLASLT_MATMUL_DESC_C_SCALE_MODE,     &scaleType_f32,  sizeof(scaleType_f32)));
     // CUBLASLT_MATMUL_DESC_C_SCALE_POINTER - If not specified, or set to NULL, the scaling factor is assumed to be 1
     CUBLASLT_CHECK(cublasLtMatrixLayoutCreate(&CLayout, c_dtype, m,  n, m)); // C unused, but must comply to D 
 
-    // [Not applicable, for nvfp4] D (in) matrix and scaling factor ------------------------------------------------------------------------------------
-    // [Not applicable, for nvfp4] CUBLASLT_MATMUL_DESC_D_SCALE_MODE is only used for NVFP4, i.e. when A/B_SCALE_MODE in VEC16_UE4M3 
-    // [Not applicable, for nvfp4] CUBLASLT_MATMUL_DESC_D_SCALE_POINTER - If not specified, or set to NULL, the scaling factor is assumed to be 1
-    
+    // D (in) matrix and scaling factor ------------------------------------------------------------------------------------
+    // CUBLASLT_MATMUL_DESC_D_SCALE_MODE is only used for NVFP4 
+    // AND only when output is FP4. Forbidden for other output type  
+    // CUBLASLT_MATMUL_DESC_D_SCALE_POINTER - If not specified, or set to NULL, the scaling factor is assumed to be 1
+    // float scaleDin = 1.0f;
+    // float *scaleDin_ptr = &scaleDin; 
+    // CUBLASLT_CHECK(cublasLtMatmulDescSetAttribute(opDesc, CUBLASLT_MATMUL_DESC_D_SCALE_MODE,    &scaleType_f32,  sizeof(scaleType_f32)));
+    // CUBLASLT_CHECK(cublasLtMatmulDescSetAttribute(opDesc, CUBLASLT_MATMUL_DESC_D_SCALE_POINTER, &scaleDin_ptr,   sizeof(scaleDin_ptr)));
+
     // D out matrix and scaling factor ------------------------------------------------------------------------------------------------------
     at::Tensor scaleDout;
-    if (dout_dtype == CUDA_R_8F_E4M3) {
+    if (dout_dtype == CUDA_R_4F_E2M1) {
         // scaleDout must fit to tile size 4x128 (To verify on layout, unswizzle)
         scaleDout = at::empty_strided({ roundoff(m/32, 4), roundoff(n, 128) }, {n, 1}, scaleA.options()); // force contiguous row-major although scaleA is row-major as well
-        __nv_fp8_e8m0 *scaleDout_ptr = static_cast<__nv_fp8_e8m0 *>(scaleDout.data_ptr());
-        CUBLASLT_CHECK(cublasLtMatmulDescSetAttribute(opDesc, CUBLASLT_MATMUL_DESC_D_OUT_SCALE_MODE,    &scaleType_e8m0, sizeof(scaleType_e8m0)));
+        __nv_fp8_e4m3 *scaleDout_ptr = static_cast<__nv_fp8_e4m3 *>(scaleDout.data_ptr());
+        CUBLASLT_CHECK(cublasLtMatmulDescSetAttribute(opDesc, CUBLASLT_MATMUL_DESC_D_OUT_SCALE_MODE,    &scaleType_e4m3, sizeof(scaleType_e4m3)));
         CUBLASLT_CHECK(cublasLtMatmulDescSetAttribute(opDesc, CUBLASLT_MATMUL_DESC_D_OUT_SCALE_POINTER, &scaleDout_ptr,  sizeof(scaleDout_ptr)));
     } else {
         CUBLASLT_CHECK(cublasLtMatmulDescSetAttribute(opDesc, CUBLASLT_MATMUL_DESC_D_OUT_SCALE_MODE, &scaleType_f32,  sizeof(scaleType_f32)));
@@ -263,6 +390,7 @@ std::tuple<at::Tensor, at::Tensor> cublaslt_mm_nvfp4(
     // denote with Dt instead of Y for clarity that it is a transpose of cublaslt output
     // still confused? Notice that Dt[n, m] row-m, outLayout is [m, n] col-m
     auto Dt = at::empty_strided({n, m}, {m, 1}, A.options().dtype(DoutType)); // Explicit strides (always row-major)
+    // TODO(fp4-last) - how do deal with this nvfp4
 
     // Epilogue ----------------------------------------------------------------------------------------------
     cublasLtEpilogue_t epi = bias.has_value() ? CUBLASLT_EPILOGUE_BIAS : CUBLASLT_EPILOGUE_DEFAULT;
@@ -298,8 +426,8 @@ std::tuple<at::Tensor, at::Tensor> cublaslt_mm_nvfp4(
     CUBLASLT_CHECK(cublasLtMatmul(
         lt, opDesc,
         &alpha,
-        A.data_ptr(), ALayout,
-        B.data_ptr(), BLayout,
+        packedA.data_ptr(), ALayout,
+        packedB.data_ptr(), BLayout,
         &beta,
         Cptr, CLayout,
         Dt.data_ptr(), DoutLayout,
