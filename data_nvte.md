@@ -145,6 +145,29 @@ TensorWrapper NVTETensorFromMXFP8Tensor(py::handle tensor, Quantizer *quantizer)
 ```
 
 
+NVTETensorFromMXFP8Tensor called during make_transformer_engine_tensor, but quantizer is None,
+quantizer->set_quantization_params(&ret); will enter NoneQuantizer's
+void set_quantization_params(TensorWrapper* tensor) const override {} which does noting! omg why we design this way!?
+when set_quantization_params is used? create_tensor
+
+NVTETensorFromMXFP8Tensor is also only called before gemm
 
 
-why it works before? depends on situation then.
+```c
+    const DType fp8_dtype = tensor.attr("_fp8_dtype").cast<DType>(); // TODO(VS) factorize to _fp8_dtype, fp8_dtype
+  if (rowwise_usage) {
+    const auto &data = tensor.attr("_rowwise_data").cast<at::Tensor>();
+    const auto &scale_inv = tensor.attr("_rowwise_scale_inv").cast<at::Tensor>();
+    ret.set_rowwise_data(data.data_ptr(), fp8_dtype, getTensorShape(data));
+    ret.set_rowwise_scale_inv(scale_inv.data_ptr(), DType::kFloat8E4M3, getTensorShape(scale_inv));
+  }
+
+  // Column-scaled data
+  if (columnwise_usage) {
+    const auto &data = tensor.attr("_columnwise_data").cast<at::Tensor>();
+    const auto &scale_inv = tensor.attr("_columnwise_scale_inv").cast<at::Tensor>();
+    ret.set_columnwise_data(data.data_ptr(), fp8_dtype, getTensorShape(data));
+    ret.set_columnwise_scale_inv(scale_inv.data_ptr(), DType::kFloat8E4M3,
+                                 getTensorShape(scale_inv));
+  }
+```

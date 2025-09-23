@@ -37,12 +37,14 @@
             "justMyCode": false,
             "env": {
                 "PYTHONPATH": "${workspaceFolder}/quantized-training",
-                // "CUBLASLT_LOG_LEVEL": "5",
-                // "CUBLASLT_LOG_MASK": "31"
+                "CUBLASLT_LOG_LEVEL": "2",
+                // "CUBLASLT_LOG_MASK": "31",
+                // "CUBLAS_LOGINFO_DBG": "1",
+                // "CUBLAS_LOGDEST_DBG": "stdout"
             },
             "cwd": "${workspaceFolder}/quantized-training",
-            // "program": "one_te_linear.py",
-            "program": "scripts/05_mxfp8_block_scaling.py",
+            "program": "one_te_linear.py",
+            // "program": "scripts/05_mxfp8_block_scaling.py",
             "args": []
         },
         {
