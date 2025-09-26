@@ -12,10 +12,32 @@ from functools import partial
 from collections import OrderedDict
 
 from .linear import CustomLinear
-from .quantize import q_nvfp4_rowwise, q_nvfp4_colwise
+from .quantize import q_nvfp4_rowwise, q_nvfp4_colwise, swizzle_rowwise_scale, swizzle_colwise_scale
 from .quantize import q_mxfp8_rowwise, q_mxfp8_colwise
 
 from .mxfp8_linear import TransMatAB
+
+from transformer_engine.pytorch.tensor.nvfp4_tensor import NVFP4Quantizer
+# Note: require def changes in nvfp4_tensor.py
+# class NVFP4Quantizer(MXFP8Quantizer):
+#     def __init__(self, rowwise, columnwise):
+#         super().__init__(TE_DType.kFloat4E2M1, rowwise=rowwise, columnwise=columnwise)
+
+rowwise_quantizer = NVFP4Quantizer(rowwise=True, columnwise=False)
+colwise_quantizer = NVFP4Quantizer(rowwise=False, columnwise=True)
+
+def te_q_nvfp4_rowwise(tensor):
+    qtensor = rowwise_quantizer(tensor)
+    qdata = qtensor._rowwise_data
+    scale = qtensor._rowwise_scale_inv
+    return qdata, swizzle_rowwise_scale(scale)
+
+# unused due to TN Layout
+def te_q_nvfp4_colwise(tensor):
+    qtensor = colwise_quantizer(tensor)
+    qdata = qtensor._columnwise_data
+    scale = qtensor._columnwise_scale_inv
+    return qdata, swizzle_colwise_scale(scale)
 
 def raise_if_not_contiguous(tensor, name):
     if not tensor.is_contiguous():
@@ -33,7 +55,7 @@ class Nvfp4Matmul(torch.autograd.Function):
 
         # Call the CUDA extension with autocast disabled to avoid any hidden casts (because it has been casted)
         with autocast(device_type="cuda", enabled=False):
-            Y, _ = op.cublaslt_mm_nvfp4(
+            Y, _ = op.cublaslt_mm_nvfp4_packedAB(
                 TransMatAB.TN.value,
                 X.dtype,
                 Wq, scaleW_swizzled, 
@@ -65,7 +87,7 @@ class Nvfp4Matmul(torch.autograd.Function):
             grad_Yq, scaleY_swizzled  = ctx.quant['2B'](grad_Y)
             
             with autocast(device_type="cuda", enabled=False):
-                grad_X, _ = op.cublaslt_mm_nvfp4(
+                grad_X, _ = op.cublaslt_mm_nvfp4_packedAB(
                     TransMatAB.TN.value, 
                     grad_Y.dtype,
                     Wtq,     scaleWt_swizzled,
@@ -80,7 +102,7 @@ class Nvfp4Matmul(torch.autograd.Function):
             Xtq,      scaleXt_swizzled = ctx.quant['3A'](Xt)
             grad_Ytq, scaleYt_swizzled = ctx.quant['3B'](grad_Yt)
 
-            grad_W, _ = op.cublaslt_mm_nvfp4(
+            grad_W, _ = op.cublaslt_mm_nvfp4_packedAB(
                 TransMatAB.TN.value,
                 grad_Y.dtype,
                 Xtq,      scaleXt_swizzled, 
@@ -112,12 +134,12 @@ class CublasltNvfp4Linear(CustomLinear):
     
     def _init_quantizers(self):
         self.quantizers = OrderedDict()
-        self.quantizers['1A'] = q_nvfp4_rowwise # W/IC
-        self.quantizers['1B'] = q_nvfp4_rowwise # X/IC
-        self.quantizers['2A'] = q_nvfp4_rowwise # Wt/OC
-        self.quantizers['2B'] = q_nvfp4_rowwise # dY/OC
-        self.quantizers['3A'] = q_nvfp4_rowwise # X/N
-        self.quantizers['3B'] = q_nvfp4_rowwise # dYt/N
+        self.quantizers['1A'] = te_q_nvfp4_rowwise # W/IC
+        self.quantizers['1B'] = te_q_nvfp4_rowwise # X/IC
+        self.quantizers['2A'] = te_q_nvfp4_rowwise # Wt/OC
+        self.quantizers['2B'] = te_q_nvfp4_rowwise # dY/OC
+        self.quantizers['3A'] = te_q_nvfp4_rowwise # X/N
+        self.quantizers['3B'] = te_q_nvfp4_rowwise # dYt/N
 
     def forward(self, input):
         shapes = None
