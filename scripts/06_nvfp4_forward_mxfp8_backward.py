@@ -33,8 +33,7 @@ model = TinyViT(linear_impl="te").to(DEVICE)
 print(model)
 optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 criterion = nn.CrossEntropyLoss()
-fp8_recipe = recipe.MXFP8BlockScaling()
-
+fp8_recipe = recipe.NVFP4FwdMXFP8BwdScaling()
 # ── 4. Training loop ───────────────────────────────────────────────────────────
 for epoch in range(1, EPOCHS + 1):
     model.train()
