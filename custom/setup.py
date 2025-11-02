@@ -36,6 +36,7 @@ setup(
                 "backend/csrc/cublaslt_mm.cu",
                 "backend/csrc/cublaslt_mm_fp32bf16.cu",
                 "backend/csrc/cublaslt_mm_mxfp8.cu",
+                "backend/csrc/cublaslt_mm_nvfp4.cu",
             ],
             extra_compile_args={
                 'cxx': cpp_debug_flags,
