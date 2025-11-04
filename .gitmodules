@@ -1,4 +1,4 @@
-[submodule "mxfp"]
-	path = mxfp
+[submodule "microxcaling"]
+	path = microxcaling
 	url = https://github.com/vuiseng9/microxcaling
 	branch = return_quantized

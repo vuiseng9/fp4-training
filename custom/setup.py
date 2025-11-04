@@ -33,7 +33,6 @@ setup(
             sources=[
                 "backend/csrc/xops.cpp", 
                 "backend/csrc/aten_mm.cpp",
-                "backend/csrc/cublaslt_mm.cu",
                 "backend/csrc/cublaslt_mm_fp32bf16.cu",
                 "backend/csrc/cublaslt_mm_mxfp8.cu",
                 "backend/csrc/cublaslt_mm_nvfp4.cu",

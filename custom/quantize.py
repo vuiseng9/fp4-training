@@ -1,9 +1,8 @@
 import torch
-from mxfp.mx.mx_ops import quantize_mx_op
-from mxfp.mx.specs import MxSpecs
+from microxcaling.mx.mx_ops import quantize_mx_op
+from microxcaling.mx.specs import MxSpecs
 
 from functools import partial
-import math
 from .swizzle import swizzle_rowwise_scale, swizzle_colwise_scale
 
 mxfp8_spec = MxSpecs({
@@ -108,7 +107,7 @@ def q_nvfp4_rowwise(tensor):
     # scales will be swizzled
     scales = swizzle_rowwise_scale(scales)
     return q_tensor.contiguous(), scales.view(torch.uint8)
-    # 
+    
 quant_fn_colwise = partial(quantize_nvfp4, rowwise=False, simulated=False)
 def q_nvfp4_colwise(tensor):
     q_tensor, scales = quant_fn_colwise(tensor)

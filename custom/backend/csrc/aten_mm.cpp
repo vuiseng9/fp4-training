@@ -47,7 +47,7 @@ at::Tensor addmm_cuda(const at::Tensor& a, const at::Tensor& b, c10::optional<at
 
 }
 
-// Registers CUDA implementations for fma, mul, binding to host side functions
+// Registers CUDA implementations for addmm_cuda
 TORCH_LIBRARY_IMPL(xops, CUDA, m) {
   m.impl("addmm_cuda", xops::addmm_cuda);
 }

@@ -8,31 +8,29 @@ from custom import (
     CustomLinear, 
     AddmmLinear, 
     CublasltLinear, 
-    TorchFloat8Linear,
-    FakeMxfp8Linear,
     CublasltMxfp8Linear,
-    CublasltFwdNvfp4BwdMxfp8Linear,
     CublasltNvfp4Linear,
+    CublasltFwdNvfp4BwdMxfp8Linear,
 )
+
+LINEAR_IMPL = {
+    "torch": nn.Linear,
+    "custom_py": CustomLinear,
+    "custom_aten": AddmmLinear,
+    "cublaslt": CublasltLinear,
+    "cublaslt_mxfp8": CublasltMxfp8Linear,
+    "cublaslt_nvfp4": CublasltNvfp4Linear, 
+    "cublaslt_nvf4_fw_mxf8_bw": CublasltFwdNvfp4BwdMxfp8Linear,
+}
 
 try:
     import transformer_engine.pytorch as te
+    LINEAR_IMPL["te"] = te.Linear
 except ImportError:
     Warning("transformer_engine.pytorch is not installed.")
     te = None
 
-LINEAR_IMPL = {
-    "torch": nn.Linear,
-    "te": te.Linear if te is not None else None, # dont fall back, so that we are aware what is going on
-    "custom_py": CustomLinear,
-    "custom_aten_mm": AddmmLinear,
-    "cublaslt": CublasltLinear,
-    "torch_f8": TorchFloat8Linear,
-    "fake_mxfp8": FakeMxfp8Linear,
-    "cublaslt_mxfp8": CublasltMxfp8Linear,
-    "cublaslt_fwd_nvfp4_bwd_mxfp8": CublasltFwdNvfp4BwdMxfp8Linear,
-    "cublaslt_nvfp4": CublasltNvfp4Linear, 
-}
+REF_IMPL = ["torch", "custom_py", "custom_aten", "cublaslt", "cublaslt_mxfp8", "cublaslt_nvfp4", "cublaslt_nvf4_fw_mxf8_bw"]
 
 class TransformerBlock(nn.Module):
     def __init__(self, E, F, H, dropout=0.1, impl="torch"):

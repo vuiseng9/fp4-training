@@ -8,8 +8,8 @@ op = torch.ops.xops
 from functools import partial
 from collections import OrderedDict
 
-from .linear import CustomLinear
-from .quantize import fq_mxfp8_rowwise, fq_mxfp8_colwise
+from .custom import CustomLinear
+from ..quantize import fq_mxfp8_rowwise, fq_mxfp8_colwise
 
 class FakeMxfp8MatMul(torch.autograd.Function):
     @staticmethod

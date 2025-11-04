@@ -93,7 +93,7 @@ if __name__ == "__main__":
         return (outer % 32) * 16 + (outer // 32) * 4 + inner
 
     # use the following to understanding how 128x4 is swizzled to 32x16
-    # ----------------------------------------
+    # --------------------------------------------------------------------------------
     # A[M, K], outer=M, inner=K
     # scaleA[M, K/32]
     offset_to_scale_a = OrderedDict()
@@ -110,7 +110,7 @@ if __name__ == "__main__":
 
     print("-"*100)
     # use the following to understanding how 4x128 is swizzled to 32x16
-    # ----------------------------------------
+    # --------------------------------------------------------------------------------
     # B[K, N], outer=N, inner=K
     # scaleB[K/32, N]
     offset_to_scale_b = OrderedDict()

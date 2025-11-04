@@ -56,8 +56,8 @@ static void ensure_cublaslt_cache_configured() {
                         "cublasLtHeuristicsCacheSetCapacity(", desired,
                         ") failed (current was ", current, ")");
             // Optional: uncomment to see a one-time note
-            TORCH_WARN("cuBLASLt heuristics cache capacity set to ", desired,
-                       " (was ", current, ")");
+            // TORCH_WARN("cuBLASLt heuristics cache capacity set to ", desired,
+            //            " (was ", current, ")");
         }
         // else: already at desired capacity; nothing to do.
     });

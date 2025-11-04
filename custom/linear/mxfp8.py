@@ -1,51 +1,42 @@
-from enum import Enum
-import torch
-from torch.amp import custom_fwd, custom_bwd, autocast
-
-import backend.xops
-op = torch.ops.xops
-
 import warnings
-warnings.simplefilter("once", UserWarning)   # warn once per callsite
+warnings.simplefilter("once", UserWarning) # warn once per callsite
 
-from functools import partial
+from enum import Enum
 from collections import OrderedDict
 
-from .linear import CustomLinear
-from .quantize import q_mxfp8_rowwise, q_mxfp8_colwise
+import torch
+import backend.xops
+op = torch.ops.xops
+from torch.amp import custom_fwd, custom_bwd, autocast
 
-def raise_if_not_contiguous(tensor, name):
-    if not tensor.is_contiguous():
-        raise ValueError(f"{name} must be contiguous, but got shape {tensor.shape} and stride {tensor.stride()}")
+from .custom import CustomLinear
+from .cublaslt import TransAB
+from ..quantize import q_mxfp8_rowwise, q_mxfp8_colwise
 
-# TODO: following Enums are manually mapped, requiring manual changes if cpp side is modified.
-#    A better implementation is single source from cpp side.
-class TransMatAB(Enum):
-    TN = 0
-    NN = 1
-    NT = 2
 
 class DoutType(Enum):
     F32 = torch.float32
     BF16 = torch.bfloat16
     F8 = torch.float8_e4m3fn
+
 class Mxfp8MatMul(torch.autograd.Function):
+    """
+    MXFP8 Linear Autograd function that calls
+    pytorch extended op cublaslt_mm_mxfp8.
+    """
     @staticmethod
     @custom_fwd(device_type="cuda", cast_inputs=torch.bfloat16)  
-    # makes *incoming* tensors BF16, meaning X, W, b will be casted to BF16 if autocast is enabled. 
-    # Implication input to quantization is bf16. Stick to this for now, need deeper understanding of autocast.
     def forward(ctx, X, W, b, quant: OrderedDict):
         Wq, scaleW_swizzled = quant['1A'](W)
         Xq, scaleX_swizzled = quant['1B'](X)
 
-        # Call the CUDA extension with autocast disabled to avoid any hidden casts (because it has been casted)
-        with autocast(device_type="cuda", enabled=False):
-            Y, _ = op.cublaslt_mm_mxfp8(
-                TransMatAB.TN.value,
-                X.dtype,
-                Wq, scaleW_swizzled, 
-                Xq, scaleX_swizzled,
-                b)
+        # gemm 1
+        Y, _ = op.cublaslt_mm_mxfp8(
+            TransAB.TN,
+            X.dtype,
+            Wq, scaleW_swizzled, 
+            Xq, scaleX_swizzled,
+            b)
 
         ctx.save_for_backward(X, W)
         ctx.quant = quant
@@ -59,34 +50,34 @@ class Mxfp8MatMul(torch.autograd.Function):
         assert X.is_contiguous(), "X must be contiguous, they are by default, find out why it is not"
         assert W.is_contiguous(), "W must be contiguous, they are by default, find out why it is not"
         
-        warnings.warn(f"grad_Y.is_contiguous()={grad_Y.is_contiguous()}, it is expected to be non-contiguous, stride(0,0), to contiguous()")
+        # warnings.warn(f"grad_Y.is_contiguous()={grad_Y.is_contiguous()}, it is expected to be non-contiguous, stride(0,0), to contiguous()")
         grad_Y = grad_Y.contiguous()      
 
         grad_X = grad_W = grad_b = None
 
+        # gemm 2
         if ctx.needs_input_grad[0] is True:
             Wq,      scaleW_swizzled = ctx.quant['2A'](W.to(grad_Y.dtype))
             grad_Yq, scaleY_swizzled = ctx.quant['2B'](grad_Y)
             
-            with autocast(device_type="cuda", enabled=False):
-                grad_X, _ = op.cublaslt_mm_mxfp8(
-                    TransMatAB.NN.value, 
-                    grad_Y.dtype,
-                    Wq, scaleW_swizzled, 
-                    grad_Yq, scaleY_swizzled,
-                    None)
+            grad_X, _ = op.cublaslt_mm_mxfp8(
+                TransAB.NN, 
+                grad_Y.dtype,
+                Wq, scaleW_swizzled, 
+                grad_Yq, scaleY_swizzled,
+                None)
 
+        # gemm 3
         if ctx.needs_input_grad[1] is True:
             Xq,      scaleX_swizzled = ctx.quant['3A'](X.to(grad_Y.dtype))
             grad_Yq, scaleY_swizzled = ctx.quant['3B'](grad_Y)
             
             grad_W, _ = op.cublaslt_mm_mxfp8(
-                TransMatAB.NT.value, 
+                TransAB.NT, 
                 grad_Y.dtype,
                 Xq, scaleX_swizzled, 
                 grad_Yq, scaleY_swizzled,
                 None)
-
 
         if ctx.has_bias and ctx.needs_input_grad[2] is True:
             grad_b = grad_Y.sum(dim=0)
@@ -96,8 +87,8 @@ class Mxfp8MatMul(torch.autograd.Function):
 
 class CublasltMxfp8Linear(CustomLinear):
     """
-    Linear Layer with fwd and bwd gemm simulated in mxfp8
-    using offical mxfp emulation kit
+    MXFP8 Linear Layer: Quantization using Microxcaling,
+    Matmul using cublaslt mxfp8 gemm wrapped in Mxfp8MatMul autograd above.
     """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
