@@ -1,6 +1,6 @@
-diff --git a/pytorch/module/ori.linear.py b/pytorch/module/linear.py
+diff --git a/pytorch/module/linear.py b/pytorch/module/linear.py
 index cf7f589..c608880 100644
---- a/pytorch/module/ori.linear.py
+--- a/pytorch/module/linear.py
 +++ b/pytorch/module/linear.py
 @@ -215,6 +215,7 @@ class _Linear(torch.autograd.Function):
                  )
