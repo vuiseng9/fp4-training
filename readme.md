@@ -18,7 +18,7 @@ Jump to:
 ### The Three GEMMs of Training
 *a.k.a. the trilogy behind FP4/FP8 speedups*
 
-The premise of low precision training is the "*Speedups*" by mapping the heavy math in fewer bit representation where corresponding hardware runs faster. On FP4-supported HW, e.g. [NVIDIA Blackwell (B200)](https://nvdam.widen.net/s/wwnsxrhm2w/blackwell-datasheet-3384703) and [AMD CDNA 4 (MI350X)](https://www.amd.com/content/dam/amd/en/documents/instinct-tech-docs/product-briefs/amd-instinct-mi350x-platform-brochure.pdf), **FP4** matmul peak throughput is about **2× of FP8**, **4× over FP/BF16**.
+The premise of low precision training is the "*Speedups*" by mapping the heavy math in fewer bit representation where corresponding hardware runs faster. On FP4-supported HW, e.g. [Nvidia Blackwell (B200)](https://nvdam.widen.net/s/wwnsxrhm2w/blackwell-datasheet-3384703) and [AMD CDNA 4 (MI350X)](https://www.amd.com/content/dam/amd/en/documents/instinct-tech-docs/product-briefs/amd-instinct-mi350x-platform-brochure.pdf), **FP4** matmul peak throughput is about **2× of FP8**, **4× over FP/BF16**.
 
 Most modern models are Transformers. The main workhorses are linear projections and attentions which are fundamentally matrix multiplications (matmuls). If we can execute these matmuls on the new FP4/FP8 units, we get speedups in training (inference too). In linear algebra libraries these matmuls are often referred to as GEMMs, short for GEneral Matrix-Matrix Multiplications.
 
@@ -62,7 +62,7 @@ A frontier example is [DeepSeek-V3][dsv3], which trains in FP8 using 128×128 we
 
 Pushing narrower precision demands finer granularity. Varying choices among hardware vendor would be a nightmare for model portability and interoperability. **Microscaling Formats (MX)**, a specification from the Open Compute Project (OCP), aims to prevent such fragmentation by establishing a common low-precision representation for vendors and model providers. At its core, **MX defines** a 1D block size of 32 elements, along with the encoding format for the scale (8-bit exponent) and quantized values (FP4/FP6/FP8, including ExMy, NaN/Inf/subnormal). MXFP4/6/8 denote MX-compliant formats.** See the [OCP MX spec][ocp_mx] for details.
 
-As of Q3/Q4 2025, on top of MXFP8/6/4, NVIDIA Blackwell also supports [NVFP4][blog_nvfp4_i]. The key differences are that **NVFP4** uses 16-element blocks instead of 32 and employs an FP8 scale instead of an 8-bit exponent**. We will experiment with MXFP8 and NVFP4 in our cuBLASLt-based implementation later.
+As of Q3/Q4 2025, on top of MXFP8/6/4, Nvidia Blackwell also supports [NVFP4][blog_nvfp4_i]. The key differences are that **NVFP4** uses 16-element blocks instead of 32 and employs an FP8 scale instead of an 8-bit exponent**. We will experiment with MXFP8 and NVFP4 in our cuBLASLt-based implementation later.
 
 | Format   | Block Size | Scale Type | Value Type           |
 |----------|:----------:|:----------:|----------------------|
@@ -90,9 +90,9 @@ That's it! These are the key concepts behind low-precision training on state-of-
 
 Setup: Use the prebuilt Docker image on a B200 GPU. Other Blackwell cards (e.g., RTX 50-series and PRO 6000) are not supported, we use for comparison are not enabled on them yet.
 ```
-docker run ... <to be added soon>
+docker run -it --gpus all vuiseng9/fp4-training
 ```
-If you'd like to customize, refer `docker/Dockerfile`. Note: building Transformer Engine from source is non-trivial, if you do, start from an NVIDIA Docker image. However, if you only want to build and run our implementation, native PyTorch + CUDA Toolkit is sufficient (no TE required).
+If you'd like to customize, refer `docker/Dockerfile`. Note: building Transformer Engine from source is non-trivial, if you do, start from an Nvidia Docker image. However, if you only want to build and run our implementation, native PyTorch + CUDA Toolkit is sufficient (no TE required).
 
 **What to run?**
 We provide two scripts that demonstrate quantized training via different `Linear` implementations:
@@ -221,22 +221,22 @@ Recommended steps and notes:
 
 ---
 ### References
-1. [Tranformer Engine Documentation](https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/examples/fp8_primer.html)
-1. [Talk in GTC March 2025](https://www.nvidia.com/en-us/on-demand/session/gtc25-s72778/)
+1. [Tranformer Engine Documentation](https://docs.Nvidia.com/deeplearning/transformer-engine/user-guide/examples/fp8_primer.html)
+1. [Talk in GTC March 2025](https://www.Nvidia.com/en-us/on-demand/session/gtc25-s72778/)
 1. [Pre-training with float8 using torchtitan and torchao](https://docs.pytorch.org/ao/0.12/pretraining.html#pre-training-with-torchtitan)
 
 Blogs:
-1. [2025/08/29, Nvidia's on Fine-Tuning gpt-oss with MXFP4/NVFP4 QAT (weight and/or activation)](https://developer.nvidia.com/blog/fine-tuning-gpt-oss-for-accuracy-and-performance-with-quantization-aware-training/) via [Model Optimizer](https://github.com/NVIDIA/TensorRT-Model-Optimizer/tree/main/examples/gpt-oss)
-1. [2025/08/25, Nvidia's on NVFP4/MXFP4 Training of Mamba-Transformer](https://developer.nvidia.com/blog/nvfp4-trains-with-precision-of-16-bit-and-speed-and-efficiency-of-4-bit/), no code shared yet, most likely via through research kernel like Quartet/Qutlass.
-1. [2025/06/05, Nvidia's on FP8 Training via Transformer Engine](https://developer.nvidia.com/blog/floating-point-8-an-introduction-to-efficient-lower-precision-ai-training/)
-1. [2025/06/24, Nvidia's on NVFP4 Inference](https://developer.nvidia.com/blog/introducing-nvfp4-for-efficient-and-accurate-low-precision-inference/)
+1. [2025/08/29, Nvidia's on Fine-Tuning gpt-oss with MXFP4/NVFP4 QAT (weight and/or activation)](https://developer.Nvidia.com/blog/fine-tuning-gpt-oss-for-accuracy-and-performance-with-quantization-aware-training/) via [Model Optimizer](https://github.com/Nvidia/TensorRT-Model-Optimizer/tree/main/examples/gpt-oss)
+1. [2025/08/25, Nvidia's on NVFP4/MXFP4 Training of Mamba-Transformer](https://developer.Nvidia.com/blog/nvfp4-trains-with-precision-of-16-bit-and-speed-and-efficiency-of-4-bit/), no code shared yet, most likely via through research kernel like Quartet/Qutlass.
+1. [2025/06/05, Nvidia's on FP8 Training via Transformer Engine](https://developer.Nvidia.com/blog/floating-point-8-an-introduction-to-efficient-lower-precision-ai-training/)
+1. [2025/06/24, Nvidia's on NVFP4 Inference](https://developer.Nvidia.com/blog/introducing-nvfp4-for-efficient-and-accurate-low-precision-inference/)
 1. [2025/03/13, AMD's blog on FP8 Training](https://rocm.blogs.amd.com/software-tools-optimization/amd-optimized-rocm-docker-for-distributed-training/README.html)
 
 Tailored-made kernels:
 1. [2025/08/19, Cursor's on 1.5x Faster MoE Training with Custom MXFP8 Kernels](https://cursor.com/en/blog/kernels#building-the-fastest-mxfp8-quantization-kernel-ever)
-2. 2025/08/28, Mojo's Matrix Multiplication on Blackwell, [Part 1](https://www.modular.com/blog/matrix-multiplication-on-nvidias-blackwell-part-1-introduction)
-3. 2025/09/05, Mojo's Matrix Multiplication on Blackwell, [Part 2](https://www.modular.com/blog/matrix-multiplication-on-nvidias-blackwell-part-2-using-hardware-features-to-optimize-matmul)
-4. 2025/09/12, Mojo's Matrix Multiplication on Blackwell, [Part 3](https://www.modular.com/blog/matrix-multiplication-on-nvidias-blackwell-part-3-the-optimizations-behind-85-of-sota-performance)
+2. 2025/08/28, Mojo's Matrix Multiplication on Blackwell, [Part 1](https://www.modular.com/blog/matrix-multiplication-on-Nvidias-blackwell-part-1-introduction)
+3. 2025/09/05, Mojo's Matrix Multiplication on Blackwell, [Part 2](https://www.modular.com/blog/matrix-multiplication-on-Nvidias-blackwell-part-2-using-hardware-features-to-optimize-matmul)
+4. 2025/09/12, Mojo's Matrix Multiplication on Blackwell, [Part 3](https://www.modular.com/blog/matrix-multiplication-on-Nvidias-blackwell-part-3-the-optimizations-behind-85-of-sota-performance)
 5. [2023/03/23, Mojo AI's Compute Fragmentation: What Matrix Multiplication Teaches Us](https://www.modular.com/blog/ais-compute-fragmentation-what-matrix-multiplication-teaches-us)
 
 Notes:
@@ -246,10 +246,10 @@ Notes:
 
 [ocp_mx]: https://www.opencompute.org/documents/
 [dsv3]: https://arxiv.org/abs/2412.19437
-[blog_nvfp4_i]: https://developer.nvidia.com/blog/introducing-nvfp4-for-efficient-and-accurate-low-precision-inference/
-[te]:https://github.com/NVIDIA/TransformerEngine
+[blog_nvfp4_i]: https://developer.Nvidia.com/blog/introducing-nvfp4-for-efficient-and-accurate-low-precision-inference/
+[te]:https://github.com/Nvidia/TransformerEngine
 [ghmsmx]: https://github.com/microsoft/microxcaling
 [ghmxfork]: https://github.com/vuiseng9/microxcaling/tree/return_quantized
-[doc_cublaslt]: https://docs.nvidia.com/cuda/cublas/#narrow-precision-data-types-usage
-[swzlayout]: https://docs.nvidia.com/cuda/cublas/#d-block-scaling-factors-layout
+[doc_cublaslt]: https://docs.Nvidia.com/cuda/cublas/#narrow-precision-data-types-usage
+[swzlayout]: https://docs.Nvidia.com/cuda/cublas/#d-block-scaling-factors-layout
 <!-- [vsmx]:  -->
