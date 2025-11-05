@@ -1,11 +1,11 @@
-## Quantized Training in FP8/FP4
+## Quantized Training in FP4(8)
 *Concepts and Reference Pytorch Implementation using [cuBLASLt][doc_cublaslt] and [Microxcaling][ghmsmx].*
 
 Narrow-precision training is rapidly becoming mainstream. This repo offers a concise technical walkthrough and reference implementation targeting modern hardware (e.g., Blackwell B200). The goal is to help practitioners understand and customize low-precision layer end-to-end, not just run a black-box recipe.
 
 Jump to:
 - [Hit the Ground Running](#hit-the-ground-running-🚀)
-- [Low Precision Training Outcomes on TinyViT/MNIST](#training-outcomes)
+- [Low Precision Training Outcomes on TinyViT/MNIST](#training-outcomes-on-tinyvitmnist)
 - [Coding Guide on using cuBLASlt and Microxcaling](#coding-guide)
 - [The Three GEMMs of Training](#the-three-gemms-of-training)
 - [1D Block Quantization, Microscaling (MX) Format and NVFP4](#1d-block-quantization-mx-format-and-nvfp4)
@@ -60,9 +60,9 @@ Quantization introduces distortion, which can cause training divergence if not p
 
 A frontier example is [DeepSeek-V3][dsv3], which trains in FP8 using 128×128 weight blocks and 1×128 activation blocks, a configuration that is friendly to Hopper architecture and helps mitigate the sensitivity to outliers in per-tensor quantization.
 
-Pushing narrower precision demands finer granularity. Varying choices among hardware vendor would be a nightmare for model portability and interoperability. **Microscaling Formats (MX)**, a specification from the Open Compute Project (OCP), aims to prevent such fragmentation by establishing a common low-precision representation for vendors and model providers. At its core, **MX defines** a 1D block size of 32 elements, along with the encoding format for the scale (8-bit exponent) and quantized values (FP4/FP6/FP8, including ExMy, NaN/Inf/subnormal). MXFP4/6/8 denote MX-compliant formats.** See the [OCP MX spec][ocp_mx] for details.
+Pushing narrower precision demands finer granularity. Varying choices among hardware vendor would be a nightmare for model portability and interoperability. **Microscaling Formats (MX)**, a specification from the Open Compute Project (OCP), aims to prevent such fragmentation by establishing a common low-precision representation for vendors and model providers. At its core, **MX defines** a 1D block size of 32 elements, along with the encoding format for the scale (8-bit exponent) and quantized values (FP4/FP6/FP8, including ExMy, NaN/Inf/subnormal). MXFP4/6/8 denote MX-compliant formats. See the [OCP MX spec][ocp_mx] for details.
 
-As of Q3/Q4 2025, on top of MXFP8/6/4, Nvidia Blackwell also supports [NVFP4][blog_nvfp4_i]. The key differences are that **NVFP4** uses 16-element blocks instead of 32 and employs an FP8 scale instead of an 8-bit exponent**. We will experiment with MXFP8 and NVFP4 in our cuBLASLt-based implementation later.
+As of Q3/Q4 2025, on top of MXFP8/6/4, Nvidia Blackwell also supports [NVFP4][blog_nvfp4_i]. The key differences are that **NVFP4** uses 16-element blocks instead of 32 and employs an FP8 scale instead of an 8-bit exponent. We will experiment with MXFP8 and NVFP4 in our cuBLASLt-based implementation later.
 
 | Format   | Block Size | Scale Type | Value Type           |
 |----------|:----------:|:----------:|----------------------|
@@ -75,11 +75,11 @@ As of Q3/Q4 2025, on top of MXFP8/6/4, Nvidia Blackwell also supports [NVFP4][bl
 
 ### Varying Axis of Quantization
 
-"1D" block quantization means the blocks are taken along **one** matrix axis, even though the physical grouping is still 2D. For example, MX groups contiguous 32 elements along a row or a column (NVFP4 uses 16 elements), so the block shape is effectively 1×K or K×1 with K is the block size.
+"1D" block quantization means the blocks are taken along **one** of the matrix axes, even though the physical grouping is still 2D. For example, MX groups contiguous 32 elements along a row or a column (NVFP4 uses 16 elements), so the block shape is effectively 1×K or K×1 where K is the block (group) size.
 
 This raises a key question: along which axis should we quantize? **Along the contraction (inner) axis of the matmul.**
 
-If you inspect the three training GEMMs closely, each $W, X, G$ must be quantized along different axes depending on the matmul. As a result, the same tensor requires both axes of quantization. In the diagram, we normalize everything to row-wise quantization and insert transposes to match our equations. In practice, implementations choose how to handle this. For example:
+If you inspect the three training GEMMs closely, each $W, X, G$ must be quantized along different axes depending on the matmul. As a result, the same tensor requires both axes of quantization. In the diagram above, we normalize everything to row-wise quantization and insert transposes to match our equations. In practice, implementations choose how to handle this. For example:
 1. [Transformer Engine][te] keeps both row-wise and column-wise quantized copies to avoid transposes at runtime.
 2. Some work uses double quantization (as shown on the right of the diagram), i.e., re-quantizing an already (de)quantized tensor along the other axis. This avoids storing two copies, at the cost of additional quantization error.
 
@@ -88,7 +88,7 @@ That's it! These are the key concepts behind low-precision training on state-of-
 ---
 ### Hit the Ground Running 🚀
 
-Setup: Use the prebuilt Docker image on a B200 GPU. Other Blackwell cards (e.g., RTX 50-series and PRO 6000) are not supported, we use for comparison are not enabled on them yet.
+Setup: Use the prebuilt Docker image on a B200 GPU. Other Blackwell cards (e.g., RTX 50-series and PRO 6000) are not supported, because [Transformer Engine][te] we use for comparison is not enabled on them yet.
 ```
 docker run -it --gpus all vuiseng9/fp4-training
 ```
@@ -171,6 +171,8 @@ stages=MATMUL_STAGES_256xAUTO clusterShape=CLUSTER_SHAPE_2x1x1 schedulingMode=0]
 workSpace=0X0 workSpaceSizeInBytes=0 beta=0 outOfPlace=1 stream=0X0
 ```
 
+**Debuggability**: `vscode/launch.json` provided for breaking at Python & C++ codes. `tests` are included to validate linear correctness.
+
 ---
 ### Training Outcomes on TinyViT/MNIST
 
@@ -179,10 +181,10 @@ workSpace=0X0 workSpaceSizeInBytes=0 beta=0 outOfPlace=1 stream=0X0
 ---
 ### Coding Guide
 
-To experiment with FP8/FP4 training, the main component we customize is the Linear layer. This requires three pieces to work together:
+To experiment with FP8/FP4 training, the main component we customize is the Linear layer. This requires 3 pieces to work together:
 (1) cuBLASLt, to drive the hardware-accelerated low-precision GEMMs,
 (2) quantization, where we rely on the official Microxcaling library (forked for customization), and
-(3) a minimal model + training loop to validate correctness and training quality. We use TinyViT on MNIST as our testbed.
+(3) a minimal model + training loop to validate correctness and training quality. We use TinyViT on MNIST as our testbed. TinyGPT coming soon.
 
 The goal of this walkthrough is not to overwhelm you with implementation details, but to give you a structured path through the code. Follow the recommended file order below to see how the components compose, from pure PyTorch ops, to ATen CUDA calls, to quantizer/swizzler and finally to cuBLASLt MX/NV matmuls. The code is commented in an incremental manner; read it in order, and if something feels unclear, trace backward through the earlier steps.
 
@@ -193,7 +195,7 @@ Recommended steps and notes:
 
 * `custom.py` subclasses `torch.nn.Linear` and use a custom `torch.autograd.Function` to implement the linear operator using native ops for clear illustration of the 3 GEMMs (no quantization yet) and as a template for custom kernels.
 
-* `cuda_aten.py` and `xops.cpp, aten_mm.cpp` introduce a custom C++/CUDA extension that calls `at::addmm/mm`, demonstrating how to wrap custom CUDA code in PyTorch and integrate it as a module.
+* `xops.cpp, aten_mm.cpp` introduce a custom C++/CUDA extension that calls `at::addmm/mm`, `cuda_aten.py` demonstrates how to wrap custom CUDA code in PyTorch and integrate it as a module.
 
 * `cublaslt.py` and `cublaslt_mm_fp32bf16.cu`: First step toward cuBLASLt integration, implementing BF16/FP32 matmul. Worth reviewing the CUDA code to see how matmul/compute descriptors are set up and cuBLASLt APIs are launched. Reasonably involved, keep the official docs [handy][doc_cublaslt].
 

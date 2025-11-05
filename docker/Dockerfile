@@ -17,6 +17,10 @@ RUN TE_DIR="$(python -c 'import pathlib, transformer_engine as te; print(pathlib
  && cd "$TE_DIR" \
  && git apply /workspace/fp4-training/utils/fix_te_linear_v2.8.patch
 
+WORKDIR /workspace/fp4-training/
+RUN mkdir -p .vscode
+RUN ln -sv $(realpath vscode/launch.json) .vscode/.
+
 WORKDIR /workspace/fp4-training
 ENV PYTHONPATH=/workspace/fp4-training
 CMD ["/bin/bash"]
