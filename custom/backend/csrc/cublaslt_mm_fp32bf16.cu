@@ -49,7 +49,7 @@ inline cudaDataType to_cuda_dtype(at::ScalarType t) {
 inline cublasComputeType_t to_compute_type(at::ScalarType t) {
     if (t == at::kFloat)     return CUBLAS_COMPUTE_32F; // default pytorch precision
     // BF16 inputs, use fast 16bf (Tensor Cores) with FP32 accumulate
-    if (t == at::kBFloat16)  return CUBLAS_COMPUTE_16F; // default pytorch precision
+    if (t == at::kBFloat16)  return CUBLAS_COMPUTE_32F_FAST_16BF;
     TORCH_CHECK(false, "Only torch.float32 and torch.bfloat16 are supported");
 }
 

@@ -5,7 +5,7 @@ from models import TransformerBlock, TinyViT, LINEAR_IMPL
 from custom import CustomLinear
 
 IMPL_TESTLIST = list(LINEAR_IMPL.keys())
-NO_CPU_IMPL = ["te", "custom_aten_mm", "cublaslt", "torch_f8", "cublaslt_mxfp8"]
+NO_CPU_IMPL = ["te", "custom_aten", "cublaslt", "cublaslt_mxfp8", "cublaslt_nvfp4", "cublaslt_nvf4_fw_mxf8_bw"]
 
 try:
     import transformer_engine.pytorch as te
@@ -34,7 +34,7 @@ class TestTransformerBlock:
         x = torch.randn(32, 10, emb_size, device=device, dtype=dtype)
 
         if linear_impl in NO_CPU_IMPL and device == "cpu":
-            with pytest.raises((AssertionError, NotImplementedError)):
+            with pytest.raises((AssertionError, NotImplementedError, ValueError)):
                 txblk(x)
         else:
             txblk(x)
