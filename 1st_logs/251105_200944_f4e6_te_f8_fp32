@@ -1,0 +1,5 @@
+usage: main_te_train_tinyvit_mnist.py [-h] [-b BATCH_SIZE] [-ep EPOCHS]
+                                      [-lr LR]
+                                      [--recipe {base,fp8,mxfp8,nvfp4}]
+                                      [--fp32]
+main_te_train_tinyvit_mnist.py: error: argument --recipe: invalid choice: 'f8' (choose from 'base', 'fp8', 'mxfp8', 'nvfp4')
