@@ -5,49 +5,75 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "interactive debugpy",
+            "name": "Custom Linear, train TinyViT MNIST",
             "type": "debugpy",
             "request": "launch",
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {
+                "PYTHONPATH": "${workspaceFolder}/",
+                // to dump cublaslt logs, useful to verify matmul precision and details
                 // "CUBLASLT_LOG_LEVEL": "2",
-                // "CUBLASLT_LOG_LEVEL": "5",
-                // "CUBLASLT_LOG_MASK": "31",
+                // "CUBLASLT_LOG_FILE": "./log.cublaslt" 
             },
-            "cwd": "${workspaceFolder}/quantized-training/custom",
-            "program": "${file}",
-            "args": []
+            "cwd": "${workspaceFolder}/",
+            "program": "main_train_tinyvit_mnist.py",
+            "args": [
+                // "-h"
+                "--impl", 
+                // uncomment one of the implementations below to test
+                // "torch",
+                // "torch", "--fp32",
+                // "custom_py",
+                // "custom_py", "--fp32",
+                // "custom_aten",
+                // "custom_aten", "--fp32",
+                // "cublaslt",
+                // "cublaslt", "--fp32",
+                "cublaslt_mxfp8",
+                // "cublaslt_mxfp8", "--fp32",
+                // "cublaslt_nvfp4",
+                // "cublaslt_nvfp4", "--fp32",
+                // "cublaslt_nvf4_fw_mxf8_bw",
+                // "cublaslt_nvf4_fw_mxf8_bw", "--fp32"
+            ]
         },
         {
-            "name": "triton - scaled_mm",
+            "name": "via Transformer Engine Recipe",
+            "type": "debugpy",
+            "request": "launch",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/",
+                // to dump cublaslt logs, useful to verify matmul precision and details
+                // "CUBLASLT_LOG_LEVEL": "2",
+                // "CUBLASLT_LOG_FILE": "./log.cublaslt" 
+            },
+            "cwd": "${workspaceFolder}/",
+            "program": "main_te_train_tinyvit_mnist.py",
+            "args": [
+                // "-h"
+                "--recipe",
+                // uncomment one of the implementations below to test
+                    // "base",
+                    // "base", "--fp32",
+                    // "f8",
+                    // "f8", "--fp32",
+                    // "mxfp8",
+                    // "mxfp8", "--fp32",
+                    "nvfp4",
+            ]
+        },
+        {
+            "name": "quantize",
             "type": "debugpy",
             "request": "launch",
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {},
-            "cwd": "${workspaceFolder}/tuts-xptops/201-triton/tutorials",
-            "program": "10-block-scaled-matmul.py",
-            "args": [
-                "--format", "nvfp4", // "nvfp4", "mxfp8", "mixed"
-                "--no-bench"
-                // "--K_range", "128", "128",
-                // "-K", "128",
-            ]
-        },
-        {
-            "name": "mxfp8 f8e4m3 dout",
-            "type": "debugpy",
-            "request": "launch",
-            "console": "integratedTerminal",
-            "justMyCode": false,
-            "env": {
-                "CUBLASLT_LOG_LEVEL": "2",
-                // "CUBLASLT_LOG_LEVEL": "5",
-                // "CUBLASLT_LOG_MASK": "31",
-            },
-            "cwd": "${workspaceFolder}/quantized-training/",
-            "program": "tests/dev_cublaslt_mm_mxfp8_f8e4m3_dout.py",
+            "cwd": "${workspaceFolder}/qt/custom",
+            "program": "custom/quantize.py",
             "args": []
         },
         {
@@ -57,67 +83,9 @@
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {},
-            "cwd": "${workspaceFolder}",
-            "program": "quantized-training/custom/swizzle.py",
+            "cwd": "${workspaceFolder}/",
+            "program": "custom/swizzle.py",
             "args": []
-        },
-        {
-            "name": "Python Train Mnist/TinyVit",
-            "type": "debugpy",
-            "request": "launch",
-            "console": "integratedTerminal",
-            "justMyCode": false,
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}/quantized-training",
-                // "CUBLASLT_LOG_LEVEL": "2",
-                // "CUBLASLT_LOG_LEVEL": "5",
-                // "CUBLASLT_LOG_MASK": "31",
-            },
-            "cwd": "${workspaceFolder}/quantized-training",
-            "program": 
-            // "scripts/one_te_linear.py",
-            // "scripts/107_custom_cublaslt_nvfp4_mixed_bf16.py",
-            // "scripts/106_custom_cublaslt_nvfp4_mixed_fp32.py",
-            "scripts/105_custom_cublaslt_fwd_nvfp4_bwd_mxfp8_mixed_bf16.py",
-            // "scripts/104_custom_cublaslt_fwd_nvfp4_bwd_mxfp8_mixed_fp32.py",
-            // "scripts/102_custom_cublaslt_mxfp8_bf16.py",
-            // "scripts/102_custom_cublaslt_mxfp8_fp32.py",
-            // "program": "scripts/100_custom_fp32.py",
-            // "program": "scripts/05_mxfp8_block_scaling.py",
-            // "program": "scripts/04_fp8_block_scaling.py",
-            // "program": "scripts/03_fp8_current_scaling.py",
-            // "program": "scripts/02_fp8_delayed_scaling.py",
-            // "program": "scripts/01_fp16.py",
-            // "program": "scripts/00_fp32.py",
-            "args": []
-        },
-        {
-            "name": "LtNvfp4Matmul",
-            "type": "cuda-gdb",
-            "request": "launch",
-            "stopAtEntry": true,
-            "environment": [
-                {
-                    "name": "CUBLASLT_LOG_LEVEL",
-                    "value": "2"
-                }
-            ],
-            "cwd": "/root/work/dev/vsqt/CUDALibrarySamples/lt-cublas/LtNvfp4Matmul",
-            "program": "/root/work/dev/vsqt/CUDALibrarySamples/lt-cublas/build/LtNvfp4Matmul/sample_cublasLt_LtNvfp4Matmul",
-        },
-        {
-            "name": "LtMxfp8Matmul",
-            "type": "cuda-gdb",
-            "request": "launch",
-            "stopAtEntry": true,
-            "environment": [
-                {
-                    "name": "CUBLASLT_LOG_LEVEL",
-                    "value": "2"
-                }
-            ],
-            "cwd": "/root/work/dev/vsqt/CUDALibrarySamples/lt-cublas/LtMxfp8Matmul",
-            "program": "/root/work/dev/vsqt/CUDALibrarySamples/lt-cublas/build/LtMxfp8Matmul/sample_cublasLt_LtMxfp8Matmul",
         },
         {
             "name": "[CPP] Launch Python, break at CPP only",
@@ -125,23 +93,24 @@
             "request": "launch",
             "program": "/usr/bin/python3",  // or path to your Python interpreter
             "args": [
-                "scripts/one_te_linear.py",
-                // "scripts/106_custom_cublaslt_nvfp4_mixed_fp32.py",
-                // "tests/dev_cublaslt_mm_nvfp4_dout.py",
-                // "scripts/102_custom_cublaslt_mxfp8_bf16.py",
-                // "scripts/102_custom_cublaslt_mxfp8_fp32.py",
-                // "scripts/104_custom_cublaslt_nvfp4_fp32.py"
+                "main_train_tinyvit_mnist.py", "--impl", 
+                "cublaslt_mxfp8",
+                // "cublaslt_mxfp8", "--fp32",
+                // "cublaslt_nvfp4",
+                // "cublaslt_nvfp4", "--fp32",
+                // "cublaslt_nvf4_fw_mxf8_bw",
+                // "cublaslt_nvf4_fw_mxf8_bw", "--fp32"
             ],
             "stopAtEntry": false,
-            "cwd": "/root/work/dev/fp4prod/quantized-training",
+            "cwd": "/workspace/fp4-training/",
             "environment": [
                 {
                     "name": "PYTHONPATH",
-                    "value": "${workspaceFolder}/quantized-training"
+                    "value": "${workspaceFolder}/"
                 },
                 // {
                 //     "name": "CUBLASLT_LOG_LEVEL",
-                //     "value": "5"
+                //     "value": "2"
                 // },
                 // {
                 //     "name": "CUBLASLT_LOG_MASK",
