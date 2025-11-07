@@ -178,7 +178,7 @@ workSpace=0X0 workSpaceSizeInBytes=0 beta=0 outOfPlace=1 stream=0X0
 
 ![](assets/table_training_convergence.png)
 
-The results are averaged over 5 runs. Use `run_all.sh` to reproduce. Note that PyTorch, Transformer Engine (TE) and our implementation are all backed by cuBLASLt, the labels in the table means to correspond our scripts [above](#hit-the-ground-running-🚀) for ease of reference.
+The results are averaged over 5 runs. Use `run_all.sh` to reproduce. Note that PyTorch, Transformer Engine (TE) and our implementation are all backed by cuBLASLt, the labels in the table mean to correspond our scripts [above](#hit-the-ground-running-🚀).
 
 **Set a** compares linear layer trained with PyTorch autocast BF16, FP32, with no quantization involved, serving the baseline training quality. TE's base variant uses its own subclassed torch.nn.Linear with autocast enabled as well. As expected, all variants converge similarly to the native PyTorch baseline; our implementation shows a slightly higher accuracy, which we don't over-interpret. The primary focus here is low-precision training.
 
@@ -224,7 +224,13 @@ Recommended steps and notes:
 * `nvf4fwd_mxf8bwd.py`: Implements a hybrid Linear layer with NVFP4 forward and MXFP8 backward using the lower level ops above.
 
 #### TN, NN, NT Layout
-*coming soon*
+
+This is basically about whether to transpose A and B in cuBLASLt, and how the three GEMMs map to each case. We won't derive the full mapping here, take it as an exercise if you're unfamiliar, but pay attention to these details:
+
+1. PyTorch tensors are row-major; cuBLASLt supports both layouts but defaults to col-major.
+1. The Linear weight in PyTorch is stored as (OC, IC) in row-major order.
+1. cuBLASLt follows the form `D = α·op(A) @ op(B) + β·C`, with an optional epilogue `(ϕ(D))`. Use epilogue to implement bias instead of the C term.
+1. Duality of matrix view: row-major X ≡ col-major Xᵀ. 
 
 ---
 ### Recent Trends in FP4 Training Research
