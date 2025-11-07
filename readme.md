@@ -5,7 +5,7 @@ Narrow-precision training is rapidly becoming mainstream. This repo offers a con
 
 Jump to:
 - [Hit the Ground Running](#hit-the-ground-running-🚀)
-- [Low Precision Training Outcomes on TinyViT/MNIST](#training-outcomes-on-tinyvitmnist)
+- [Training Results on TinyViT/MNIST](#training-results-on-tinyvitmnist)
 - [Coding Guide on using cuBLASlt and Microxcaling](#coding-guide)
 - [The Three GEMMs of Training](#the-three-gemms-of-training)
 - [1D Block Quantization, Microscaling (MX) Format and NVFP4](#1d-block-quantization-mx-format-and-nvfp4)
@@ -16,7 +16,7 @@ Jump to:
 
 ---
 ### The Three GEMMs of Training
-*a.k.a. the trilogy behind FP4/FP8 speedups*
+*Trilogy behind FP4/FP8 speedups*
 
 The premise of low precision training is the "*Speedups*" by mapping the heavy math in fewer bit representation where corresponding hardware runs faster. On FP4-supported HW, e.g. [Nvidia Blackwell (B200)](https://nvdam.widen.net/s/wwnsxrhm2w/blackwell-datasheet-3384703) and [AMD CDNA 4 (MI350X)](https://www.amd.com/content/dam/amd/en/documents/instinct-tech-docs/product-briefs/amd-instinct-mi350x-platform-brochure.pdf), **FP4** matmul peak throughput is about **2× of FP8**, **4× over FP/BF16**.
 
@@ -174,9 +174,23 @@ workSpace=0X0 workSpaceSizeInBytes=0 beta=0 outOfPlace=1 stream=0X0
 **Debuggability**: `vscode/launch.json` provided for breaking at Python & C++ codes. `tests` are included to validate linear correctness.
 
 ---
-### Training Outcomes on TinyViT/MNIST
+### Training Results on TinyViT/MNIST
 
-*coming soon*
+![](assets/table_training_convergence.png)
+
+The results are averaged over 5 runs. Use `run_all.sh` to reproduce. Note that PyTorch, Transformer Engine (TE) and our implementation are all backed by cuBLASLt, the labels in the table means to correspond our scripts [above](#hit-the-ground-running-🚀) for ease of reference.
+
+**Set a** compares linear layer trained with PyTorch autocast BF16, FP32, with no quantization involved, serving the baseline training quality. TE's base variant uses its own subclassed torch.nn.Linear with autocast enabled as well. As expected, all variants converge similarly to the native PyTorch baseline; our implementation shows a slightly higher accuracy, which we don't over-interpret. The primary focus here is low-precision training.
+
+**Set b** begins with TE's per-tensor FP8 recipe. As we don't include a per-tensor FP8 variant in our implementation, b1 is shown mainly for reference, as it's trivial to enable with TE. The accuracy drop from baseline is negligible. Moving to TE's MXFP8, results are nearly identical. In principle, MXFP8 should outperform per-tensor quantization due to finer granularity, but on this small model and dataset the difference is minimal. Our MXFP8 Linear achieves slightly higher accuracy in BF16 runs and marginally lower in FP32. We suspect this small variance arises from differences in scale computation, as discussed in several prior works and we discussed further in the [research](#recent-trends-in-fp4-training-research) section. Nevertheless, MXFP8 training proves viable even on a low-capacity model like TinyViT.
+
+**Set c** presents the key result of 4-bit training. TE's NVFP4 recipe achieves accuracy nearly matching its higher-precision counterparts, though slightly lower. FP32 runs are unavailable due to a required operator lacking FP32 support. In contrast, our NVFP4 Linear becomes untrainable in BF16 runs. There are a few reasons for this. The strong performance of TE's NVFP4 comes from its sophisticated mixed-precision strategy, which we have not yet integrated:
+(1) a per-tensor FP32 scale applied on top of the E4M3 scale to extend dynamic range ([Figure 2][nvfp4_i]),
+(2) stochastic rounding to reduce bias, and
+(3) rotation-based transform to mitigate outliers.
+We discuss (2) and (3) further in the [research](#recent-trends-in-fp4-training-research) section. Despite lacking these components, when we fall back to FP32, our NVFP4 Linear trains up to 87.7% (C2), and when combined with MXFP8 backward (C3), it gains roughly one percentage point more. We plan to incorporate (1) in near future.
+
+**Training speedup** is not reported, as our current implementation is slower, not due to cuBLASLt, but primarily because of the quantizer. We use Microxcaling, implemented in pure PyTorch and not optimized for performance. The main intent is to help users debug and understand the low-precision training flow without the complexity of low-level code. That said, adding a CUDA-based quantization kernel is part of our planned next steps.
 
 ---
 ### Coding Guide
