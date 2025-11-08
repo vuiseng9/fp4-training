@@ -192,6 +192,8 @@ We discuss (2) and (3) further in the [research](#recent-trends-in-fp4-training-
 
 **Training speedup** is not reported, as our current implementation is slower, not due to cuBLASLt, but primarily because of the quantizer. We use Microxcaling, implemented in pure PyTorch and not optimized for performance. The main intent is to help users debug and understand the low-precision training flow without the complexity of low-level code. That said, adding a CUDA-based quantization kernel is part of our planned next steps.
 
+If you're curious about FP4 performance gains, we benchmarked Transformer Engine [here][myperf] with Llama3-8B pretraining on 8× B200 GPUs. NVFP4 achieves ~1.25× speedup over MXFP8 and ~1.65× over BF16.
+
 ---
 ### Coding Guide
 
@@ -319,3 +321,4 @@ There are additional techniques such as differentiable quantizers (F) and oscill
 [te]:https://github.com/Nvidia/TransformerEngine
 [ghmsmx]: https://github.com/microsoft/microxcaling
 [ghmxfork]: https://github.com/vuiseng9/microxcaling/tree/return_quantized
+[myperf]: https://github.com/vuiseng9/nemo-perf-nvfp4/
