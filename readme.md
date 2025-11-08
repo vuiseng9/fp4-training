@@ -4,7 +4,7 @@
 Narrow-precision training is rapidly becoming mainstream. This repo offers a concise technical walkthrough and reference implementation targeting modern hardware (e.g., Blackwell B200). The goal is to help practitioners understand and customize low-precision layer end-to-end, not just run a black-box recipe.
 
 Jump to:
-- [Hit the Ground Running](#hit-the-ground-running-🚀)
+- [Hit the Ground Running](#hit-the-ground-running)
 - [Training Results on TinyViT/MNIST](#training-results-on-tinyvitmnist)
 - [Coding Guide on using cuBLASlt and Microxcaling](#coding-guide)
 - [The Three GEMMs of Training](#the-three-gemms-of-training)
@@ -86,13 +86,13 @@ If you inspect the three training GEMMs closely, each $W, X, G$ must be quantize
 That's it! These are the key concepts behind low-precision training on state-of-the-art hardware today. Next, we will implement a custom PyTorch Linear module that performs the trio of GEMMs using cuBLASLt with official MX quantization.
 
 ---
-### Hit the Ground Running 🚀
+### Hit the Ground Running
 
 Setup: Use the prebuilt Docker image on a B200 GPU. Other Blackwell cards (e.g., RTX 50-series and PRO 6000) are not supported, because [Transformer Engine][te] we use for comparison is not enabled on them yet.
 ```
 docker run -it --gpus all vuiseng9/fp4-training
 ```
-If you'd like to customize, refer `docker/Dockerfile`. Note: building Transformer Engine from source is non-trivial, if you do, start from an Nvidia Docker image. However, if you only want to build and run our implementation, native PyTorch + CUDA Toolkit is sufficient (no TE required).
+If you'd like to customize, refer `docker/Dockerfile`. Note: building Transformer Engine from source is non-trivial, if you do, start from an Nvidia Docker image. However, if you only want to build and run our implementation, CUDA Toolkit >= 12.9 and a compatible Pytorch is sufficient (no TE required).
 
 **What to run?**
 We provide two scripts that demonstrate quantized training via different `Linear` implementations:
