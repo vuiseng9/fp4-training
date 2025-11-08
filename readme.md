@@ -288,6 +288,16 @@ There are additional techniques such as differentiable quantizers (F) and oscill
 * OCP [Microscaling Formats (MX)][ocp_mx] Specification
 * [cuBLASLt Documentation][doc_cublaslt]
 
+```
+@misc{chua2025quantizedtraining,
+  title        = {Quantized Training in FP4(8): Concepts and Reference PyTorch Implementation using cuBLASLt and Microscaling},
+  author       = {Chua, Vui Seng},
+  year         = {2025},
+  url          = {https://github.com/vuiseng9/fp4-training},
+  note         = {Available at \url{https://github.com/vuiseng9/fp4-training}}
+}
+```
+
 
 [msra_fp4]: https://arxiv.org/abs/2501.17116
 [quartet]: https://arxiv.org/abs/2505.14669
