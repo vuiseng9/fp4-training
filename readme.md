@@ -185,7 +185,7 @@ The results are averaged over 5 runs. Use `run_all.sh` to reproduce. Note that P
 **Set b** begins with TE's per-tensor FP8 recipe. As we don't include a per-tensor FP8 variant in our implementation, b1 is shown mainly for reference, as it's trivial to enable with TE. The accuracy drop from baseline is negligible. Moving to TE's MXFP8, results are nearly identical. In principle, MXFP8 should outperform per-tensor quantization due to finer granularity, but on this small model and dataset the difference is minimal. Our MXFP8 Linear achieves slightly higher accuracy in BF16 runs and marginally lower in FP32. We suspect this small variance arises from differences in scale computation, as discussed in several prior works and we discussed further in the [research](#recent-trends-in-fp4-training-research) section. Nevertheless, MXFP8 training proves viable even on a low-capacity model like TinyViT.
 
 **Set c** presents the key result of 4-bit training. TE's NVFP4 recipe achieves accuracy nearly matching its higher-precision counterparts, though slightly lower. FP32 runs are unavailable due to a required operator lacking FP32 support. In contrast, our NVFP4 Linear becomes untrainable in BF16 runs. There are a few reasons for this. The strong performance of TE's NVFP4 comes from its sophisticated mixed-precision strategy, which we have not yet integrated:
-(1) a per-tensor FP32 scale applied on top of the E4M3 scale to extend dynamic range ([Figure 2][nvfp4_i]),
+(1) a per-tensor FP32 scale applied on top of the E4M3 scale to extend dynamic range ([Figure 2][blog_nvfp4_i]),
 (2) stochastic rounding to reduce bias, and
 (3) rotation-based transform to mitigate outliers.
 We discuss (2) and (3) further in the [research](#recent-trends-in-fp4-training-research) section. Despite lacking these components, when we fall back to FP32, our NVFP4 Linear trains up to 87.7% (C2), and when combined with MXFP8 backward (C3), it gains roughly one percentage point more. We plan to incorporate (1) in near future.
@@ -292,7 +292,7 @@ There are additional techniques such as differentiable quantizers (F) and oscill
 
 ```
 @misc{chua2025quantizedtraining,
-  title        = {Quantized Training in FP4(8): Concepts and Reference PyTorch Implementation using cuBLASLt and Microscaling},
+  title        = {Quantized Training in FP4(8): Concepts and Reference PyTorch Implementation using cuBLASLt and Microxcaling},
   author       = {Chua, Vui Seng},
   year         = {2025},
   url          = {https://github.com/vuiseng9/fp4-training},
