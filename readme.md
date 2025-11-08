@@ -234,44 +234,78 @@ This is basically about whether to transpose A and B in cuBLASLt, and how the th
 
 ---
 ### Recent Trends in FP4 Training Research
-*coming soon*
+
+Quantization has long been mainstream for inference (e.g., Post-Training Quantization and Quantization-Aware Training).
+However, training in FP4/FP8 has only gained momentum in the last 1–2 years, with several notable research works emerging in 2025. Below are some of the key themes shaping this space.
+
+1. Stochastic Rounding (SR)
+
+   The rounding mode determines how scaled values are rounded to the nearest representable quantized levels, see the `round()` term in our earlier formula. Typically (or naively), *round-to-nearest* is used. This has been found to introduce quantization bias and can destabilize gradient descent. Numerous studies have shown that *randomly* rounding up or down alleviates this issue and is now widely regarded as an essential component in stable low-precision training. Paper A-E adopt SR and confirm its effectiveness. Paper B has theoretically arrived that when the gradient magnitude of a parameter falls below √3×quantization noise, SR's benefit vanishes, proposing last-mile fine-tuning in higher precision, meaning QAT at last phase.
+
+2. Rotation-based Transform Prior to Quantization
+
+   Over the past two years, rotation-based transforms have emerged as a key advancement in quantization, spanning quantization at any phase. The central idea is that applying an orthogonal rotation to a matrix redistributes its energy, resulting in narrower dynamic ranges and less outliers. Because the transform is orthogonal, it remains fully reversible during dequantization. The most common choice is the random Hadamard transform, whose entries are ±1. Its appeal lies in efficiency, the matrix–vector multiplication can be implemented in O(nlogn) time instead of O(n²), making the approach computationally practical. This is an ingredient in Paper A, C, D.
+
+3. Scaling Factor Formulation
+   
+   This topic centers on an implementation detail in Microscaling, specifically the computation of the power-of-two scale factor. The [OCP MX standard][ocp_mx] baseline formulation was observed to cause training divergence, as empirically reported in Paper G. Both Papers E and G independently proposed modification to the scale computation, referred to as the truncation-free or round-to-infinity formulation. The mathematical form is slightly more involved, see the papers for details. Despite the different terminology, the two formulations are effectively equivalent upon closer inspection and yield better convergence in practice.
+
+There are additional techniques such as differentiable quantizers (F) and oscillation reduction via EMA (E), which we do not emphasize here as we find them less critical. Finally, we'd like to draw your attention to Paper [A][nv_nvfp4] from NVIDIA, which demonstrates FP4 training on a 12B hybrid Mamba-Transformer trained up to 10 trillions of tokens with outcomes comparable to FP8. What we love about the paper is the ablation of the 4 key ingredients, conclusively showing that (1) stochastic rounding and (2) rotation-based quantization are the most critical contributors to stable convergence.
 
 ---
 ### Future Plan
+- [ ] Integrate per-tensor FP32 scale on top of NVFP4 E4M3 scale
 - [ ] Supplement quantization CUDA kernel for performance
 - [ ] Add training of a TinyGPT on small text dataset
 
 ---
+
 ### References
-1. [Tranformer Engine Documentation](https://docs.Nvidia.com/deeplearning/transformer-engine/user-guide/examples/fp8_primer.html)
-1. [Talk in GTC March 2025](https://www.Nvidia.com/en-us/on-demand/session/gtc25-s72778/)
-1. [Pre-training with float8 using torchtitan and torchao](https://docs.pytorch.org/ao/0.12/pretraining.html#pre-training-with-torchtitan)
 
-Blogs:
-1. [2025/08/29, Nvidia's on Fine-Tuning gpt-oss with MXFP4/NVFP4 QAT (weight and/or activation)](https://developer.Nvidia.com/blog/fine-tuning-gpt-oss-for-accuracy-and-performance-with-quantization-aware-training/) via [Model Optimizer](https://github.com/Nvidia/TensorRT-Model-Optimizer/tree/main/examples/gpt-oss)
-1. [2025/08/25, Nvidia's on NVFP4/MXFP4 Training of Mamba-Transformer](https://developer.Nvidia.com/blog/nvfp4-trains-with-precision-of-16-bit-and-speed-and-efficiency-of-4-bit/), no code shared yet, most likely via through research kernel like Quartet/Qutlass.
-1. [2025/06/05, Nvidia's on FP8 Training via Transformer Engine](https://developer.Nvidia.com/blog/floating-point-8-an-introduction-to-efficient-lower-precision-ai-training/)
-1. [2025/06/24, Nvidia's on NVFP4 Inference](https://developer.Nvidia.com/blog/introducing-nvfp4-for-efficient-and-accurate-low-precision-inference/)
-1. [2025/03/13, AMD's blog on FP8 Training](https://rocm.blogs.amd.com/software-tools-optimization/amd-optimized-rocm-docker-for-distributed-training/README.html)
 
-Tailored-made kernels:
-1. [2025/08/19, Cursor's on 1.5x Faster MoE Training with Custom MXFP8 Kernels](https://cursor.com/en/blog/kernels#building-the-fastest-mxfp8-quantization-kernel-ever)
-2. 2025/08/28, Mojo's Matrix Multiplication on Blackwell, [Part 1](https://www.modular.com/blog/matrix-multiplication-on-Nvidias-blackwell-part-1-introduction)
-3. 2025/09/05, Mojo's Matrix Multiplication on Blackwell, [Part 2](https://www.modular.com/blog/matrix-multiplication-on-Nvidias-blackwell-part-2-using-hardware-features-to-optimize-matmul)
-4. 2025/09/12, Mojo's Matrix Multiplication on Blackwell, [Part 3](https://www.modular.com/blog/matrix-multiplication-on-Nvidias-blackwell-part-3-the-optimizations-behind-85-of-sota-performance)
-5. [2023/03/23, Mojo AI's Compute Fragmentation: What Matrix Multiplication Teaches Us](https://www.modular.com/blog/ais-compute-fragmentation-what-matrix-multiplication-teaches-us)
+**FP4 Research**:
+*Dates are based on first appearance on arXiv*
+* [25/09/29][nv_nvfp4], (A) Pretraining Large Language Models with NVFP4
+* [25/05/25][fp4_all_the_way], (B) FP4 All the Way: Fully Quantized Training of LLMs
+* [25/05/20][quartet], (C) Quartet: Native FP4 Training Can Be Optimal for Large Language Models
+* [25/03/04][cornell_amzn], (D) Training LLMs with MXFP4
+* [25/02/28][tetrajet], (E) TetraJet: Oscillation-Reduced MXFP4 Training for Vision Transformers
+* [25/01/28][msra_fp4], (F) Optimizing Large Language Model Training Using FP4 Quantization
 
-Notes:
-1. [Aug State](./notes/250801_State_of_Narrow_Precision.md)
-1. See [SOTA Research](./notes/99_sota_notes.md)
-1. [Build Transformer Engine from source](https://github.com/vuiseng9/vs-colab/blob/main/cheatsheet/tx-engine.md)
+**FP8 Research**
+* [25/05/20][nv_mxfp8], (G) Recipes for Pre-training LLMs with MXFP8
+* [22/09/12][fp8_formats], (H) FP8 Formats for Deep Learning
 
-[ocp_mx]: https://www.opencompute.org/documents/
+**Other related**
+
+* [2025/08/25, Nvidia's on NVFP4/MXFP4 Training of Mamba-Transformer](https://developer.Nvidia.com/blog/nvfp4-trains-with-precision-of-16-bit-and-speed-and-efficiency-of-4-bit/)
+* [25/06/24, Nvidia's blog on NVFP4 Inference][blog_nvfp4_i]
+
+* [25/06/04, Nvidia's blog on FP8 Training](https://developer.nvidia.com/blog/floating-point-8-an-introduction-to-efficient-lower-precision-ai-training/)
+* [2025/03/13, AMD's blog on FP8 Training](https://rocm.blogs.amd.com/software-tools-optimization/amd-optimized-rocm-docker-for-distributed-training/README.html)
+* [March GTC 2025, FP8 training on Blackwell with Transformer Engine](https://www.nvidia.com/en-us/on-demand/session/gtc25-s72778/)
+
+* OCP [Microscaling Formats (MX)][ocp_mx] Specification
+* [cuBLASLt Documentation][doc_cublaslt]
+
+
+[msra_fp4]: https://arxiv.org/abs/2501.17116
+[quartet]: https://arxiv.org/abs/2505.14669
+[fp4_all_the_way]: https://arxiv.org/abs/2505.19115
+[tetrajet]: https://arxiv.org/abs/2502.20853
+[cornell_amzn]:https://arxiv.org/abs/2502.20586
+
+[nv_nvfp4]: https://arxiv.org/abs/2506.08027
+[nv_mxfp8]: http://arxiv.org/abs/2506.08027
+[fp8_formats]: https://arxiv.org/abs/2209.05433
+
+[ocp_mx]: https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf
+[doc_cublaslt]: https://docs.Nvidia.com/cuda/cublas/#narrow-precision-data-types-usage
+[swzlayout]: https://docs.Nvidia.com/cuda/cublas/#d-block-scaling-factors-layout
+
 [dsv3]: https://arxiv.org/abs/2412.19437
 [blog_nvfp4_i]: https://developer.Nvidia.com/blog/introducing-nvfp4-for-efficient-and-accurate-low-precision-inference/
+
 [te]:https://github.com/Nvidia/TransformerEngine
 [ghmsmx]: https://github.com/microsoft/microxcaling
 [ghmxfork]: https://github.com/vuiseng9/microxcaling/tree/return_quantized
-[doc_cublaslt]: https://docs.Nvidia.com/cuda/cublas/#narrow-precision-data-types-usage
-[swzlayout]: https://docs.Nvidia.com/cuda/cublas/#d-block-scaling-factors-layout
-<!-- [vsmx]:  -->
