@@ -307,7 +307,7 @@ There are additional techniques such as differentiable quantizers (F) and oscill
 [tetrajet]: https://arxiv.org/abs/2502.20853
 [cornell_amzn]:https://arxiv.org/abs/2502.20586
 
-[nv_nvfp4]: https://arxiv.org/abs/2506.08027
+[nv_nvfp4]: https://arxiv.org/abs/2509.25149
 [nv_mxfp8]: http://arxiv.org/abs/2506.08027
 [fp8_formats]: https://arxiv.org/abs/2209.05433
 
