@@ -257,7 +257,7 @@ There are additional techniques such as differentiable quantizers (F) and oscill
 ---
 ### Future Plan
 - [ ] Integrate per-tensor FP32 scale on top of NVFP4 E4M3 scale
-- [ ] Supplement quantization CUDA kernel for performance
+- [ ] Supplement (fused) quantization CUDA kernel for performance
 - [ ] Add training of a TinyGPT on small text dataset
 
 ---
@@ -279,16 +279,18 @@ There are additional techniques such as differentiable quantizers (F) and oscill
 * [22/09/12][fp8_formats], (H) FP8 Formats for Deep Learning
 
 **Other related**
+* [25/11/03, mxfp8, mxfp4, nvfp4 formats and applications in PyTorch][torchao-torchconf]
 
-* [2025/08/25, Nvidia's on NVFP4/MXFP4 Training of Mamba-Transformer](https://developer.Nvidia.com/blog/nvfp4-trains-with-precision-of-16-bit-and-speed-and-efficiency-of-4-bit/)
+* [25/08/25, Nvidia's on NVFP4/MXFP4 Training of Mamba-Transformer](https://developer.Nvidia.com/blog/nvfp4-trains-with-precision-of-16-bit-and-speed-and-efficiency-of-4-bit/)
 * [25/06/24, Nvidia's blog on NVFP4 Inference][blog_nvfp4_i]
 
 * [25/06/04, Nvidia's blog on FP8 Training](https://developer.nvidia.com/blog/floating-point-8-an-introduction-to-efficient-lower-precision-ai-training/)
-* [2025/03/13, AMD's blog on FP8 Training](https://rocm.blogs.amd.com/software-tools-optimization/amd-optimized-rocm-docker-for-distributed-training/README.html)
+* [25/03/13, AMD's blog on FP8 Training](https://rocm.blogs.amd.com/software-tools-optimization/amd-optimized-rocm-docker-for-distributed-training/README.html)
 * [March GTC 2025, FP8 training on Blackwell with Transformer Engine](https://www.nvidia.com/en-us/on-demand/session/gtc25-s72778/)
 
 * OCP [Microscaling Formats (MX)][ocp_mx] Specification
 * [cuBLASLt Documentation][doc_cublaslt]
+
 
 ```
 @misc{chua2025quantizedtraining,
@@ -322,3 +324,5 @@ There are additional techniques such as differentiable quantizers (F) and oscill
 [ghmsmx]: https://github.com/microsoft/microxcaling
 [ghmxfork]: https://github.com/vuiseng9/microxcaling/tree/return_quantized
 [myperf]: https://github.com/vuiseng9/nemo-perf-nvfp4/
+
+[torchao-torchconf]: https://youtu.be/Up0EfrudTSQ?si=Ke-gxu6C_0DTdibM
