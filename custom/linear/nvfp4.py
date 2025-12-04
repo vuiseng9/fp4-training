@@ -12,6 +12,7 @@ from .custom import CustomLinear
 from .cublaslt import TransAB
 from ..quantize import q_nvfp4_rowwise
 
+NVFP4_AMAX = 448.0 * 6.0 # for tensor-wide scaling on A and B, amax(e4m3)*amax(e2m1)^-1
 
 class Nvfp4Matmul(torch.autograd.Function):
     """
@@ -24,6 +25,11 @@ class Nvfp4Matmul(torch.autograd.Function):
     @staticmethod
     @custom_fwd(device_type="cuda", cast_inputs=torch.bfloat16)  
     def forward(ctx, X, W, b, quant: OrderedDict):
+        tscale_W = NVFP4_AMAX / W.abs().max()
+        tscale_X = NVFP4_AMAX / X.abs().max()
+        W = tscale_W * W
+        X = tscale_X * X
+        
         Wq, scaleW_swizzled = quant['1A'](W)
         Xq, scaleX_swizzled = quant['1B'](X)
 
@@ -33,9 +39,10 @@ class Nvfp4Matmul(torch.autograd.Function):
             X.dtype,
             Wq, scaleW_swizzled, 
             Xq, scaleX_swizzled,
-            b)
+            b,
+            (tscale_W*tscale_X).item())
 
-        ctx.save_for_backward(X, W)
+        ctx.save_for_backward(X, W, tscale_X, tscale_W)
         ctx.quant = quant
         ctx.has_bias = b is not None
         return Y
@@ -43,7 +50,7 @@ class Nvfp4Matmul(torch.autograd.Function):
     @staticmethod
     @custom_bwd(device_type="cuda")
     def backward(ctx, grad_Y):
-        X, W = ctx.saved_tensors
+        X, W, tscale_X, tscale_W = ctx.saved_tensors
         assert X.is_contiguous(), "X must be contiguous, they are by default, find out why it is not"
         assert W.is_contiguous(), "W must be contiguous, they are by default, find out why it is not"
         
@@ -51,6 +58,9 @@ class Nvfp4Matmul(torch.autograd.Function):
         grad_Y = grad_Y.contiguous()      
 
         grad_X = grad_W = grad_b = None
+
+        tscale_grad_Y = NVFP4_AMAX/grad_Y.abs().max()
+        grad_Y = tscale_grad_Y * grad_Y
 
         # gemm 2
         if ctx.needs_input_grad[0] is True:
@@ -65,7 +75,8 @@ class Nvfp4Matmul(torch.autograd.Function):
                 grad_Y.dtype,
                 Wtq,     scaleWt_swizzled,
                 grad_Yq, scaleY_swizzled,
-                None)
+                None,
+                (tscale_W*tscale_grad_Y).item())
 
         # gemm 3
         if ctx.needs_input_grad[1] is True:
@@ -81,7 +92,8 @@ class Nvfp4Matmul(torch.autograd.Function):
                 grad_Y.dtype,
                 Xtq,      scaleXt_swizzled, 
                 grad_Ytq, scaleYt_swizzled,
-                None)
+                None,
+                (tscale_X*tscale_grad_Y).item())
 
         if ctx.has_bias and ctx.needs_input_grad[2] is True:
             grad_b = grad_Y.sum(dim=0)

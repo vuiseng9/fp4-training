@@ -186,7 +186,8 @@ std::tuple<at::Tensor, at::Tensor> cublaslt_mm_nvfp4(
     const at::ScalarType DoutType,
     const at::Tensor& A, const at::Tensor& scaleA,
     const at::Tensor& B, const at::Tensor& scaleB,
-    const c10::optional<at::Tensor>& bias) {
+    const c10::optional<at::Tensor>& bias,
+    const c10::optional<double>& alpha) {
     // A and B are post-quantized data in torch.float32 or bfloat32 which will be casted to fp4 and byte-packed internally here.
     // A and B are row-major  will be treated as col-major by cublaslt.
     // scaleA and scaleB are row-major uint8 tensor and must have been sizzled. they are reinterpret as e4m3.
@@ -319,7 +320,7 @@ std::tuple<at::Tensor, at::Tensor> cublaslt_mm_nvfp4(
     CUBLASLT_CHECK(cublasLtMatmulDescCreate(&opDesc, computeType, scaleType));
     // how to organize the attribute setup? look at canonical cublaslt gemm, we setup for each input, type, layout
 
-    const float alpha = 1.0f;
+    const float alpha_f = 1.0/static_cast<float>(alpha.value_or(1.0));
     const float beta  = 0.0f;
     // CUBLASLT_MATMUL_DESC_SCALE_TYPE is for alpha and beta, default value depends on CUBLASLT_MATMUL_DESC_COMPUTE_TYPE. 
     // Keeping default type for now. opDesc has initialized a scale type.
@@ -425,7 +426,7 @@ std::tuple<at::Tensor, at::Tensor> cublaslt_mm_nvfp4(
     // Run Matmul
     CUBLASLT_CHECK(cublasLtMatmul(
         lt, opDesc,
-        &alpha,
+        &alpha_f,
         packedA.data_ptr(), ALayout,
         packedB.data_ptr(), BLayout,
         &beta,
