@@ -55,6 +55,7 @@ E2M1_NORM_MAX =  6.0
 E4M3_NORM_MAX =  448.0
 E4M3_SUBNORM_MIN = 2**-9
 def quantize_nvfp4(tensor, rowwise=True, simulated=True):
+    tensor = tensor.to(torch.float32)
     if tensor.ndim != 2:
         raise ValueError("Input tensor must be 2D for nvfp4 quantization")
     orishape = tensor.shape
