@@ -2,6 +2,7 @@
 import torch
 from torch.amp import custom_fwd, custom_bwd
 
+import math
 import backend.xops
 import warnings
 warnings.simplefilter("once", UserWarning)   # warn once per callsite
@@ -63,6 +64,12 @@ class CustomLinear(torch.nn.Linear):
     Custom linear layer template to wrap around custom autograd Function for matmul.
     """
     # no need to override the __init__ because we use the exact signature and behavior
+    def reset_parameters(self):
+        torch.nn.init.normal_(self.weight, mean=0.0, std=0.023)
+        if self.bias is not None:
+            fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(self.weight)
+            bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+            torch.nn.init.uniform_(self.bias, -bound, bound)
 
     @classmethod
     def from_linear(cls, linear_layer):
