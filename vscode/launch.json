@@ -5,18 +5,50 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "debug",
+            "type": "debugpy",
+            "request": "launch",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/fp4-training",
+                "NVTE_NVFP4_DISABLE_RHT": "1",
+                // to dump cublaslt logs, useful to verify matmul precision and details
+                // "CUBLASLT_LOG_LEVEL": "2",
+                // "CUBLASLT_LOG_FILE": "./log.cublaslt" 
+            },
+            "cwd": "${workspaceFolder}/fp4-training",
+            "program": "debug.py",
+            "args": [
+                // "-h"
+                "--recipe",
+                // uncomment one of the implementations below to test
+                    // "base",
+                    // "base", "--fp32",
+                    // "f8",
+                    // "f8", "--fp32",
+                    // "mxfp8",
+                    // "mxfp8", "--fp32",
+                    // "nvfp4",
+                    "nvfp4", "--fp32",
+                    // "--per_step_loss",
+                    "--debug_linear",
+                    // "--print_io_stats"
+            ]
+        },
+        {
             "name": "Custom Linear, train TinyViT MNIST",
             "type": "debugpy",
             "request": "launch",
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {
-                "PYTHONPATH": "${workspaceFolder}/",
+                "PYTHONPATH": "${workspaceFolder}/fp4-training",
                 // to dump cublaslt logs, useful to verify matmul precision and details
                 // "CUBLASLT_LOG_LEVEL": "2",
                 // "CUBLASLT_LOG_FILE": "./log.cublaslt" 
             },
-            "cwd": "${workspaceFolder}/",
+            "cwd": "${workspaceFolder}/fp4-training",
             "program": "main_train_tinyvit_mnist.py",
             "args": [
                 // "-h"
@@ -45,12 +77,13 @@
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {
-                "PYTHONPATH": "${workspaceFolder}/",
+                "PYTHONPATH": "${workspaceFolder}/fp4-training",
+                "NVTE_NVFP4_DISABLE_RHT": "1",
                 // to dump cublaslt logs, useful to verify matmul precision and details
                 // "CUBLASLT_LOG_LEVEL": "2",
                 // "CUBLASLT_LOG_FILE": "./log.cublaslt" 
             },
-            "cwd": "${workspaceFolder}/",
+            "cwd": "${workspaceFolder}/fp4-training",
             "program": "main_te_train_tinyvit_mnist.py",
             "args": [
                 // "-h"
@@ -62,8 +95,8 @@
                     // "f8", "--fp32",
                     // "mxfp8",
                     // "mxfp8", "--fp32",
-                    "nvfp4",
-                    // "nvfp4", "--fp32",
+                    // "nvfp4",
+                    "nvfp4", "--fp32",
             ]
         },
         {
@@ -73,7 +106,7 @@
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {},
-            "cwd": "${workspaceFolder}/qt/custom",
+            "cwd": "${workspaceFolder}/fp4-training/custom",
             "program": "custom/quantize.py",
             "args": []
         },
