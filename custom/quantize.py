@@ -54,7 +54,7 @@ E2_MIN = 0 # unbiased exponent of E2M1, min
 E2M1_NORM_MAX =  6.0
 E4M3_NORM_MAX =  448.0
 E4M3_SUBNORM_MIN = 2**-9
-def quantize_nvfp4(tensor, rowwise=True, simulated=True):
+def quantize_nvfp4(tensor, rowwise=True, simulated=True, stochastic_rounding=False):
     tensor = tensor.to(torch.float32)
     if tensor.ndim != 2:
         raise ValueError("Input tensor must be 2D for nvfp4 quantization")
@@ -84,7 +84,11 @@ def quantize_nvfp4(tensor, rowwise=True, simulated=True):
     e = torch.floor(torch.log2(scaled_nvblocked.clamp(min=eps))).clamp(E2_MIN, E2_MAX)
     # find M1
     m = (scaled_nvblocked / (2**e))
-    m = torch.round( m*2 ) / 2 # nearest rounding # Round Tie to Even
+    if stochastic_rounding is True:
+        noise = torch.rand_like(m) - 0.5
+        m = torch.round( m*2 + noise) / 2     
+    else:
+        m = torch.round( m*2 ) / 2 # nearest rounding # Round Tie to Even
 
     q_nvblocked = sign * (2**e) * m
     # scales, q_nvblocked calculation complete, shapes are not blocked
@@ -102,16 +106,16 @@ def quantize_nvfp4(tensor, rowwise=True, simulated=True):
         return q_tensor, scales
 
 quant_fn_rowwise = partial(quantize_nvfp4, rowwise=True, simulated=False)
-def q_nvfp4_rowwise(tensor):
-    q_tensor, scales = quant_fn_rowwise(tensor)
+def q_nvfp4_rowwise(tensor, sr=False):
+    q_tensor, scales = quant_fn_rowwise(tensor, stochastic_rounding=sr)
     # we only pack q_tensor in cpp implementation using cuda util function
     # scales will be swizzled
     scales = swizzle_rowwise_scale(scales)
     return q_tensor.contiguous(), scales.view(torch.uint8)
     
 quant_fn_colwise = partial(quantize_nvfp4, rowwise=False, simulated=False)
-def q_nvfp4_colwise(tensor):
-    q_tensor, scales = quant_fn_colwise(tensor)
+def q_nvfp4_colwise(tensor, sr=False):
+    q_tensor, scales = quant_fn_colwise(tensor, stochastic_rounding=sr)
     # we only pack q_tensor in cpp implementation using cuda util function
     # scales will be swizzled
     scales = swizzle_colwise_scale(scales)

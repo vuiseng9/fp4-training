@@ -1,3 +1,4 @@
+from functools import partial
 import warnings
 warnings.simplefilter("once", UserWarning)   # warn once per callsite
 
@@ -110,9 +111,9 @@ class CublasltNvfp4Linear(CustomLinear):
         self.quantizers['1A'] = q_nvfp4_rowwise # W/IC
         self.quantizers['1B'] = q_nvfp4_rowwise # X/IC
         self.quantizers['2A'] = q_nvfp4_rowwise # Wt/OC
-        self.quantizers['2B'] = q_nvfp4_rowwise # dY/OC
+        self.quantizers['2B'] = partial(q_nvfp4_rowwise, sr=True) # dY/OC
         self.quantizers['3A'] = q_nvfp4_rowwise # X/N
-        self.quantizers['3B'] = q_nvfp4_rowwise # dYt/N
+        self.quantizers['3B'] = partial(q_nvfp4_rowwise, sr=True) # dYt/N
 
     def forward(self, input):
         shapes = None
