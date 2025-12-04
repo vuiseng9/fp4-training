@@ -30,9 +30,9 @@
                 // "custom_aten", "--fp32",
                 // "cublaslt",
                 // "cublaslt", "--fp32",
-                "cublaslt_mxfp8",
+                // "cublaslt_mxfp8",
                 // "cublaslt_mxfp8", "--fp32",
-                // "cublaslt_nvfp4",
+                "cublaslt_nvfp4",
                 // "cublaslt_nvfp4", "--fp32",
                 // "cublaslt_nvf4_fw_mxf8_bw",
                 // "cublaslt_nvf4_fw_mxf8_bw", "--fp32"
@@ -63,6 +63,7 @@
                     // "mxfp8",
                     // "mxfp8", "--fp32",
                     "nvfp4",
+                    // "nvfp4", "--fp32",
             ]
         },
         {

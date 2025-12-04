@@ -1,3 +1,5 @@
+import os
+os.environ["NVTE_NVFP4_DISABLE_RHT"] = "1" # Disable RHT in te nvfp4 recipe can work with fp32 training
 import argparse
 from tqdm import tqdm
 from contextlib import nullcontext
@@ -10,6 +12,7 @@ from torchvision import datasets, transforms
 from models import TinyViT
 import transformer_engine.pytorch as te
 from transformer_engine.common import recipe
+
 
 KEY2RECIPE = {
     "base": None, # use Transformer Engine module and use bf16 by default and --fp32
@@ -43,9 +46,6 @@ def main():
 
     if args.recipe not in KEY2RECIPE:
         raise ValueError(f"Unsupported recipe {args.recipe}. Supported recipes: {KEY2RECIPE.keys()}")
-
-    if args.recipe == 'nvfp4' and args.fp32:
-        raise ValueError("NVFP4 does not support FP32 mode. RHT only support bfloat16")
     
     te_recipe = KEY2RECIPE[args.recipe]() if args.recipe != 'base' else None
 
