@@ -1,5 +1,6 @@
 import os
 os.environ["NVTE_NVFP4_DISABLE_RHT"] = "1" # Disable RHT in te nvfp4 recipe can work with fp32 training
+os.environ["NVTE_NVFP4_DISABLE_2D_QUANTIZATION"] = "1"  # Disable 2D quantization 
 import argparse
 from tqdm import tqdm
 from contextlib import nullcontext
