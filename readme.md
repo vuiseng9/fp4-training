@@ -176,19 +176,17 @@ workSpace=0X0 workSpaceSizeInBytes=0 beta=0 outOfPlace=1 stream=0X0
 ---
 ### Training Results on TinyViT/MNIST
 
-![](assets/table_training_convergence.png)
+![](assets/251204-table_training_convergence.png)
 
 The results are averaged over 5 runs. Use `run_all.sh` to reproduce. Note that PyTorch, Transformer Engine (TE) and our implementation are all backed by cuBLASLt, the labels in the table mean to correspond our scripts [above](#hit-the-ground-running-🚀).
 
-**Set a** compares linear layer trained with PyTorch autocast BF16, FP32, with no quantization involved, serving the baseline training quality. TE's base variant uses its own subclassed torch.nn.Linear with autocast enabled as well. As expected, all variants converge similarly to the native PyTorch baseline; our implementation shows a slightly higher accuracy, which we don't over-interpret. The primary focus here is low-precision training.
+**Set a** compares linear layer trained with PyTorch autocast BF16, FP32, with no quantization involved, serving the baseline training quality. TE's base variant uses its own subclassed torch.nn.Linear with autocast enabled as well. As expected, all variants converge similarly to the native PyTorch baseline; we don't over-interpret here as the primary focus is low-precision training.
 
-**Set b** begins with TE's per-tensor FP8 recipe. As we don't include a per-tensor FP8 variant in our implementation, b1 is shown mainly for reference, as it's trivial to enable with TE. The accuracy drop from baseline is negligible. Moving to TE's MXFP8, results are nearly identical. In principle, MXFP8 should outperform per-tensor quantization due to finer granularity, but on this small model and dataset the difference is minimal. Our MXFP8 Linear achieves slightly higher accuracy in BF16 runs and marginally lower in FP32. We suspect this small variance arises from differences in scale computation, as discussed in several prior works and we discussed further in the [research](#recent-trends-in-fp4-training-research) section. Nevertheless, MXFP8 training proves viable even on a low-capacity model like TinyViT.
+**Set b** begins with TE's per-tensor FP8 recipe. As we don't include a per-tensor FP8 variant in our implementation, b1 is shown mainly for reference and because it is trivial to enable with TE. The accuracy drop from baseline is negligible. Moving to TE's MXFP8, results are nearly identical. In principle, MXFP8 should outperform per-tensor quantization due to finer granularity, but on this small model and dataset the difference is minimal. Our MXFP8 Linear achieves slightly higher accuracy in BF16 runs and marginally lower in FP32. We suspect this small variance arises from differences in scale computation, as discussed in several prior works and we discussed further in the [research](#recent-trends-in-fp4-training-research) section. Nevertheless, MXFP8 training proves viable even on a low-capacity model like TinyViT.
 
-**Set c** presents the key result of 4-bit training. TE's NVFP4 recipe achieves accuracy nearly matching its higher-precision counterparts, though slightly lower. FP32 runs are unavailable due to a required operator lacking FP32 support. In contrast, our NVFP4 Linear becomes untrainable in BF16 runs. There are a few reasons for this. The strong performance of TE's NVFP4 comes from its sophisticated mixed-precision strategy, which we have not yet integrated:
-(1) a per-tensor FP32 scale applied on top of the E4M3 scale to extend dynamic range ([Figure 2][blog_nvfp4_i]),
-(2) stochastic rounding to reduce bias, and
-(3) rotation-based transform to mitigate outliers.
-We discuss (2) and (3) further in the [research](#recent-trends-in-fp4-training-research) section. Despite lacking these components, when we fall back to FP32, our NVFP4 Linear trains up to 87.7% (C2), and when combined with MXFP8 backward (C3), it gains roughly one percentage point more. We plan to incorporate (1) in near future.
+**Set c** presents the key results of 4-bit training. For TE's recipe, we disable RHT and 2D weight quantization which are otherwise enabled by default and keep stochastic rounding on, as it is included in our implementation. TE's NVFP4 recipe achieves accuracy that nearly matches its higher-precision counterparts, though slightly lower. In contrast, our NVFP4 Linear and MXFP8-backward variants are trainable but converge a few points lower.
+
+There are several possible reasons for this. We have not yet included per-tensor scaling prior to NVFP4 quantization, and there may also be inherent numerical gaps in our implementation. Our experience tell us that these formats are highly sensitive, and small differences in rounding, clamping, or BF16 intermediate computations can lead to large deviations, as observed in earlier experiments. We will revisit and address these issues later. Overall, the results confirm that FP4 training is feasible with the right techniques, consistent with recent findings in the literature.
 
 **Training speedup** is not reported, as our current implementation is slower, not due to cuBLASLt, but primarily because of the quantizer. We use Microxcaling, implemented in pure PyTorch and not optimized for performance. The main intent is to help users debug and understand the low-precision training flow without the complexity of low-level code. That said, adding a CUDA-based quantization kernel is part of our planned next steps.
 
@@ -215,7 +213,7 @@ Recommended steps and notes:
 
 * `cublaslt.py` and `cublaslt_mm_fp32bf16.cu`: First step toward cuBLASLt integration, implementing BF16/FP32 matmul. Worth reviewing the CUDA code to see how matmul/compute descriptors are set up and cuBLASLt APIs are launched. Reasonably involved, keep the official docs [handy][doc_cublaslt].
 
-* `quantize.py`: Before using low-precision matmul, we quantize inputs using Microxcaling. Our fork is included as a submodule in this repo. We customize behavior and propagate MX formats downstream for packing/swizzling. Focus `q_mxfp8_rowwise, q_mxfp8_colwise, q_nvfp4_rowwise`. 
+* `quantize.py`: Before using low-precision matmul, we quantize inputs using Microxcaling for mxfp8 and implement our own for nvfp4. Our fork of Microxcaling is included as a submodule in this repo. We customize behavior and propagate MX formats downstream for packing/swizzling. Focus `q_mxfp8_rowwise, q_mxfp8_colwise, q_nvfp4_rowwise`. Also find out how simple to enable stochastic rounding.
 
 * `swizzle.py`: [Layout][swzlayout] transformation of quantization scales for the access patterns required by matmul engine.
 
