@@ -81,6 +81,7 @@ if [ "$NINST" -gt 1 ]; then
     run_parallel $NINST run_te mxfp8 bf16
     run_parallel $NINST run_te mxfp8 fp32
     run_parallel $NINST run_te nvfp4 bf16
+    run_parallel $NINST run_te nvfp4 fp32
     # Note: TE does not support nvfp4 in fp32 mode due to internal RHT
 else
     echo "Skipping — NINST <= 0"
@@ -100,6 +101,7 @@ else
     run_te mxfp8 bf16
     run_te mxfp8 fp32
     run_te nvfp4 bf16
+    run_te nvfp4 fp32
     # Note: TE does not support nvfp4 in fp32 mode due to internal RHT
 fi
 
