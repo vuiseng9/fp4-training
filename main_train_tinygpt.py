@@ -1,5 +1,6 @@
 import os
 import argparse
+import math
 from tqdm import tqdm
 from contextlib import nullcontext
 
@@ -8,15 +9,17 @@ from torch import nn
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
-from models import TinyViT
+from models import TinyGPT
 from models import REF_IMPL
+
+from dataset import TinyStories, ByteTokenizer
 
 DEBUG_MODE = os.getenv("DEBUG_MODE", "0") == "1"
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Train TinyViT on MNIST with various Linear implementations")
+    parser = argparse.ArgumentParser(description="Train TinyGPT on TinyStories with various Linear implementations")
     parser.add_argument("-b", "--batch-size", type=int, default=64, help="Batch size for training (default: 64), must be divisible by 32")
-    parser.add_argument("-ep", "--epochs", type=int, default=3, help="Number of epochs to train (default: 3")
+    parser.add_argument("-ep", "--epochs", type=int, default=20, help="Number of epochs to train (default: 3")
     parser.add_argument("-lr", type=float, default=1e-3, help="Learning rate (default: 1e-3)")
     parser.add_argument("--impl", type=str, required=True, choices=REF_IMPL, help=f"Linear layer implementation (required). Choices: {REF_IMPL}")
     parser.add_argument("--fp32", action="store_true", help="Use FP32 precision (default: False, uses BF16 autocast per standard today)")
@@ -31,6 +34,7 @@ def main():
     EPOCHS       = args.epochs
     LR           = args.lr
     DEVICE       = "cuda:0"
+    CTX_SIZE     = 128
 
     if BATCH_SIZE % 32 != 0:
         raise ValueError("Batch size must be divisible by 32 for 1D block quantization.")
@@ -39,22 +43,26 @@ def main():
         if args.fp32:
             return nullcontext()
         return torch.autocast(device_type="cuda", dtype=torch.bfloat16)
-   
-    # ── 2. Data ────────────────────────────────────────────────────────────────────
-    transform = transforms.Compose([
-        transforms.ToTensor(),                      # (0,1) range, tensor shape (C,H,W)
-        transforms.Normalize((0.1307,), (0.3081,))  # mean & std of MNIST
-    ])
 
-    train_ds = datasets.MNIST(root="raw_data", train=True,  download=True, transform=transform)
-    test_ds  = datasets.MNIST(root="raw_data", train=False, download=True, transform=transform)
+    # ── 2. Data ────────────────────────────────────────────────────────────────────
+    tokenizer = ByteTokenizer()
+
+    train_ds = TinyStories(root="raw_data", train=True,  download=True, tokenizer=tokenizer, ctx_size=CTX_SIZE, max_chars=2**16)
+    test_ds  = TinyStories(root="raw_data", train=False, download=True, tokenizer=tokenizer, ctx_size=CTX_SIZE, max_chars=2**8)
 
     train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, drop_last=True, shuffle=True)
     test_loader  = DataLoader(test_ds,  batch_size=BATCH_SIZE, drop_last=True)
 
+    print(f"Training #tokens/epoch: {len(train_loader) * BATCH_SIZE * CTX_SIZE:,}, Test #tokens: {len(test_loader) * BATCH_SIZE * CTX_SIZE:,}")
+
     # ── 3. Model ───────────────────────────────────────────────────────────────────
 
-    model = TinyViT(linear_impl=args.impl).to(DEVICE)
+    model = TinyGPT(linear_impl=args.impl,
+                    vocab_size=tokenizer.VOCAB_SIZE,
+                    ctx_size=CTX_SIZE,
+                    embed_dim=128,
+                    num_heads=4,
+                    mlp_ratio=4.0).to(DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
     criterion = nn.CrossEntropyLoss()
 
@@ -70,48 +78,56 @@ def main():
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Trainable #params: {trainable_params:,}")
 
+    def generate(prompt="Once upon a time, in a land far, far away, "):
+        input_seq = torch.tensor(tokenizer(prompt)['input_ids']).to(DEVICE)
+        generated_ids = model.generate(input_seq, max_new_tokens=64, do_sample=True)
+        generated_text = tokenizer.decode(generated_ids[0].cpu().tolist())
+        return f"| prompt | {prompt} \n| cont.  | {generated_text[len(prompt):]}"
+    
     # ── 4. Training loop ───────────────────────────────────────────────────────────
     for epoch in range(1, EPOCHS + 1):
         model.train()
-        total, correct, loss_sum = 0, 0, 0.0
+        train_loss = 0.0
 
         pbar = tqdm(train_loader, desc=f"Epoch {epoch}/{EPOCHS}")
-        for x, y in pbar:
+        for n, (x, y) in enumerate(pbar):
             x, y = x.to(DEVICE), y.to(DEVICE)
 
             with get_autocast_ctx():
                 logits = model(x)
-            loss = criterion(logits, y)
+            loss = criterion(logits.view(-1, tokenizer.VOCAB_SIZE), y.view(-1)) # essentially each position is a separate prediction.
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-            loss_sum += loss.detach().item() * y.size(0)
-            preds = logits.argmax(1)
-            correct += (preds == y).sum().item()
-            total   += y.size(0)
-
-        train_acc = 100.0 * correct / total
-        train_loss = loss_sum / total
+            train_loss = (n * train_loss + loss.detach().item()) / (n + 1)
+        train_ppl  = math.exp(train_loss)
 
         # ── 5. Quick eval ─────────────────────────────────────────────────────────
         model.eval()
-        total, correct = 0, 0
+        test_loss = 0.0
         with torch.no_grad():
-            for x, y in test_loader:
-                x, y = x.to(DEVICE), y.to(DEVICE)
+            for i, (x, y) in enumerate(test_loader):
+                x, y = x.to(DEVICE), y.to(DEVICE)              
                 with get_autocast_ctx():
-                    preds = model(x).argmax(1)
-                correct += (preds == y).sum().item()
-                total   += y.size(0)
-        test_acc = 100.0 * correct / total
+                    logits = model(x)
+                loss = criterion(logits.view(-1, tokenizer.VOCAB_SIZE), y.view(-1)) # essentially each position is a separate prediction.
+                
+                test_loss = (i * test_loss + loss.detach().item()) / (i + 1)
+            
+            test_ppl = math.exp(test_loss)
+            test_bpc = test_loss / math.log(2)
 
         print(f"[Epoch {epoch}/{pbar.format_dict['elapsed']:5.1f} s] train_loss={train_loss:.4f} "
-              f"train_acc={train_acc:.2f}%  test_acc={test_acc:.2f}%")
+              f"train_ppl={train_ppl:.2f}  test_ppl={test_ppl:.2f} test_bpc={test_bpc:.4f}")
 
-    print("Done.")
+        if DEBUG_MODE:
+            print(f"\n{generate()}\n")
 
+    print("Training Done.")
+
+    print(f"\n{generate()}\n")
 
 if __name__ == "__main__":
     main()

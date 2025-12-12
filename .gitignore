@@ -1,5 +1,6 @@
 logs/
 data
+raw_data
 # ── Python byte‑code ───────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
