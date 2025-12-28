@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
 from models import TinyViT
-from models import REF_IMPL
+from models import LINEAR_IMPL
 
 
 def parse_args():
@@ -16,7 +16,7 @@ def parse_args():
     parser.add_argument("-b", "--batch-size", type=int, default=64, help="Batch size for training (default: 64), must be divisible by 32")
     parser.add_argument("-ep", "--epochs", type=int, default=3, help="Number of epochs to train (default: 3")
     parser.add_argument("-lr", type=float, default=1e-3, help="Learning rate (default: 1e-3)")
-    parser.add_argument("--impl", type=str, required=True, choices=REF_IMPL, help=f"Linear layer implementation (required). Choices: {REF_IMPL}")
+    parser.add_argument("--impl", type=str, default="torch", choices=LINEAR_IMPL.keys(), help=f"Linear layer implementation (required). Choices: {LINEAR_IMPL.keys()}")
     parser.add_argument("--fp32", action="store_true", help="Use FP32 precision (default: False, uses BF16 autocast per standard today)")
     return parser.parse_args()
 
