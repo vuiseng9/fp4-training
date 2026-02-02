@@ -1,6 +1,8 @@
 import torch
 import math
 
+OLD_IMLP = False
+
 def swizzle_rowwise_scale(scale_mat):
     tile_dim_y = 128
     tile_dim_x = 4
@@ -16,22 +18,26 @@ def swizzle_rowwise_scale(scale_mat):
     padded_shape = (ntile_y * tile_dim_y, ntile_x * tile_dim_x)
     padded_scale_mat = torch.zeros(padded_shape, dtype=scale_mat.dtype, device=scale_mat.device)
     padded_scale_mat[:orig_y, :orig_x] = scale_mat
-    padded_scale_mat = padded_scale_mat.view(ntile_y, tile_dim_y, ntile_x, tile_dim_x).permute(0,2,1,3)
 
-    swizzle_scales = torch.zeros((ntile_y*swiz_tile_dim_y, ntile_x*swiz_tile_dim_x), dtype=padded_scale_mat.dtype, device=padded_scale_mat.device).contiguous()
+    if not OLD_IMLP:
+        return padded_scale_mat.view(ntile_y, 4, 32, ntile_x, 4).transpose(1, 3).reshape(ntile_y*32, ntile_x*16)
+    else:
+        padded_scale_mat = padded_scale_mat.view(ntile_y, tile_dim_y, ntile_x, tile_dim_x).permute(0,2,1,3)
 
-    for ty in range(ntile_y):
-        for tx in range(ntile_x):
-            scale_tile = padded_scale_mat[ty, tx]
-            chunked_scale_tile = scale_tile.view(4, 32, 4)
+        swizzle_scales = torch.zeros((ntile_y*swiz_tile_dim_y, ntile_x*swiz_tile_dim_x), dtype=padded_scale_mat.dtype, device=padded_scale_mat.device).contiguous()
 
-            for i in range(4):
-                swizzle_scales[
-                    ty*swiz_tile_dim_y:(ty+1)*swiz_tile_dim_y,
-                    (tx*swiz_tile_dim_x)+(i*4):(tx*swiz_tile_dim_x)+(i*4)+4
-                ] = chunked_scale_tile[i]
+        for ty in range(ntile_y):
+            for tx in range(ntile_x):
+                scale_tile = padded_scale_mat[ty, tx]
+                chunked_scale_tile = scale_tile.view(4, 32, 4)
 
-    return swizzle_scales
+                for i in range(4):
+                    swizzle_scales[
+                        ty*swiz_tile_dim_y:(ty+1)*swiz_tile_dim_y,
+                        (tx*swiz_tile_dim_x)+(i*4):(tx*swiz_tile_dim_x)+(i*4)+4
+                    ] = chunked_scale_tile[i]
+
+        return swizzle_scales
 
 
 def swizzle_colwise_scale(scale_mat):
@@ -49,21 +55,26 @@ def swizzle_colwise_scale(scale_mat):
     padded_shape = (ntile_y * tile_dim_y, ntile_x * tile_dim_x)
     padded_scale_mat = torch.zeros(padded_shape, dtype=scale_mat.dtype, device=scale_mat.device)
     padded_scale_mat[:orig_y, :orig_x] = scale_mat
-    padded_scale_mat = padded_scale_mat.view(ntile_y, tile_dim_y, ntile_x, tile_dim_x).permute(0,2,1,3)
+    
+    if not OLD_IMLP:
+        return padded_scale_mat.view(ntile_y, 4, ntile_x, 4, 32).transpose(1, 4).reshape(ntile_y*32, ntile_x*16)
+    
+    else:
+        padded_scale_mat = padded_scale_mat.view(ntile_y, tile_dim_y, ntile_x, tile_dim_x).permute(0,2,1,3)
 
-    swizzle_scales = torch.zeros((ntile_y*swiz_tile_dim_y, ntile_x*swiz_tile_dim_x), dtype=padded_scale_mat.dtype, device=padded_scale_mat.device).contiguous()
+        swizzle_scales = torch.zeros((ntile_y*swiz_tile_dim_y, ntile_x*swiz_tile_dim_x), dtype=padded_scale_mat.dtype, device=padded_scale_mat.device).contiguous()
 
-    for ty in range(ntile_y):
-        for tx in range(ntile_x):
-            scale_tile = padded_scale_mat[ty, tx]
-            chunked_transposed = scale_tile.view(4, -1, 32).permute(1, 0, 2).permute(0,2,1)
-            swizzle_logical = chunked_transposed.permute(1,0,2).reshape(swiz_tile_dim_y, swiz_tile_dim_x)
-            
-            swizzle_scales[
-                ty*swiz_tile_dim_y:(ty+1)*swiz_tile_dim_y,
-                tx*swiz_tile_dim_x:(tx+1)*swiz_tile_dim_x
-                ] = swizzle_logical
-    return swizzle_scales
+        for ty in range(ntile_y):
+            for tx in range(ntile_x):
+                scale_tile = padded_scale_mat[ty, tx]
+                chunked_transposed = scale_tile.view(4, -1, 32).permute(1, 0, 2).permute(0,2,1)
+                swizzle_logical = chunked_transposed.permute(1,0,2).reshape(swiz_tile_dim_y, swiz_tile_dim_x)
+                
+                swizzle_scales[
+                    ty*swiz_tile_dim_y:(ty+1)*swiz_tile_dim_y,
+                    tx*swiz_tile_dim_x:(tx+1)*swiz_tile_dim_x
+                    ] = swizzle_logical
+        return swizzle_scales
 
 
 

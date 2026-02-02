@@ -87,6 +87,8 @@ else
     echo "Skipping — NINST <= 0"
     run_ours torch bf16
     run_ours torch fp32
+    run_ours cublaslt bf16
+    run_ours cublaslt fp32
     run_ours cublaslt_mxfp8 bf16
     run_ours cublaslt_mxfp8 fp32
     run_ours cublaslt_nvfp4 bf16
