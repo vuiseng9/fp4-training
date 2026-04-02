@@ -5,17 +5,17 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+
+LINEAR_IMPL = {
+    "torch": nn.Linear,
+    "te": None
+}
+
 try:
     import transformer_engine.pytorch as te
     LINEAR_IMPL["te"] = te.Linear
 except ImportError:
     Warning("transformer_engine.pytorch is not installed.")
-    te = None
-
-LINEAR_IMPL = {
-    "torch": nn.Linear,
-    "te": te.Linear if te is not None else None, # dont fall back, so that we are aware what is going on
-}
 
 class TransformerBlock(nn.Module):
     def __init__(self, E, F, H, dropout=0.1, impl="torch"):
