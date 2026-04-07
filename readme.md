@@ -10,7 +10,7 @@ Jump to:
 - [The Three GEMMs of Training](#the-three-gemms-of-training)
 - [1D Block Quantization, Microscaling (MX) Format and NVFP4](#1d-block-quantization-mx-format-and-nvfp4)
 - [Varying Axis of Quantization](#varying-axis-of-quantization)
-- [Recent Trends in FP4 Training Research](#recent-trends-in-fp4-training-research)
+- [Recent Trends in FP4 Training Research as of Q1'2026](#recent-trends-in-fp4-training-research)
 - [Future Plan](#future-plan)
 - [Further Reading and References](#references)
 
@@ -236,11 +236,15 @@ This is basically about whether to transpose A and B in cuBLASLt, and how the th
 ### Recent Trends in FP4 Training Research
 
 Quantization has long been mainstream for inference (e.g., Post-Training Quantization and Quantization-Aware Training).
-However, training in FP4/FP8 has only gained momentum in the last 1–2 years, with several notable research works emerging in 2025. Below are some of the key themes shaping this space.
+However, training in FP4/FP8 has only gained momentum in recent years, with several notable research works emerging in 2025. Below are some of the key themes shaping this space through Q1'2026.
 
-1. Stochastic Rounding (SR)
+1. Unbiasedness in Quantization
 
-   The rounding mode determines how scaled values are rounded to the nearest representable quantized levels, see the `round()` term in our earlier formula. Typically (or naively), *round-to-nearest* is used. This has been found to introduce quantization bias and can destabilize gradient descent. Numerous studies have shown that *randomly* rounding up or down alleviates this issue and is now widely regarded as an essential component in stable low-precision training. Paper A-E adopt SR and confirm its effectiveness. Paper B has theoretically arrived that when the gradient magnitude of a parameter falls below √3×quantization noise, SR's benefit vanishes, proposing last-mile fine-tuning in higher precision, meaning QAT at last phase.
+   The rounding mode determines how scaled values are rounded to the nearest representable quantized levels, see the `round()` term in our earlier formula. Typically (or naively), *round-to-nearest* is used. This has been found to introduce quantization bias and can destabilize gradient descent. 
+
+   * Stochastic Rounding (SR): Numerous studies have shown that *randomly* rounding up or down alleviates this issue and is now widely regarded as an essential component in stable low-precision training. Paper A-E adopt SR and confirm its effectiveness. Paper B has theoretically arrived that when the gradient magnitude of a parameter falls below √3×quantization noise, SR's benefit vanishes, proposing last-mile fine-tuning in higher precision, meaning QAT at last phase. Paper A ablates components of its NVFP4 recipe and shown that stochastic rounding applied to the quantization in backprop (weight grad) has the highest contribution to its efficacy.
+
+   * Unbiased Gradient Estimation: Classical SGD convergence theory typically assumes unbiased stochastic gradients. In quantized training, stochastic rounding has now become a standard way to preserve unbiasedness in expectation and has been shown empirically to improve convergence. Quartet 2 introduces MS-EDEN, an alternative theoretically-grounded approach inspired by EDEN from the distributed optimization literature. The key idea is a bias correction factor, arrived from formulation via RHT rotated space, to rescale the quantization factor, attaining *de-biasing* of deterministic rounding in quantization. MS-EDEN further adapts this mechanism to the NVFP4 setting, i.e. its 16 element block structure and FP8 scale representation. The reported results show improved convergence, though the gains are observed together with several additional recipe components.
 
 2. Rotation-based Transform Prior to Quantization
 
@@ -250,7 +254,9 @@ However, training in FP4/FP8 has only gained momentum in the last 1–2 years, w
    
    This topic centers on an implementation detail in Microscaling, specifically the computation of the power-of-two scale factor. The [OCP MX standard][ocp_mx] baseline formulation was observed to cause training divergence, as empirically reported in Paper G. Both Papers E and G independently proposed modification to the scale computation, referred to as the truncation-free or round-to-infinity formulation. The mathematical form is slightly more involved, see the papers for details. Despite the different terminology, the two formulations are effectively equivalent upon closer inspection and yield better convergence in practice.
 
-There are additional techniques such as differentiable quantizers (F) and oscillation reduction via EMA (E), which we do not emphasize here as we find them less critical. Finally, we'd like to draw your attention to Paper [A][nv_nvfp4] from NVIDIA, which demonstrates FP4 training on a 12B hybrid Mamba-Transformer trained up to 10 trillions of tokens with outcomes comparable to FP8. What we love about the paper is the ablation of the 4 key ingredients, conclusively showing that (1) stochastic rounding and (2) rotation-based quantization are the most critical contributors to stable convergence.
+4. Weight Oscillation Suppression
+
+   As quantized training approaches convergence, the learning rate decays and updates become small, causing weights to repeatedly oscillate (jump back and forth) between adjacent quantization bins. Tetrajet v1 (E) uses EMA-based quantization and optimizer-side ramping to damp the oscillation. Observed to work well for ViT but insufficient for LLM training. V2 proposes an oscillating weight detector by measuring ratio of accumulated gradient changes between high precision and quantized. A threshold triggers *reset* of the oscillating weight to the center of their current quantization bin.
 
 ---
 ### Future Plan
@@ -262,6 +268,11 @@ There are additional techniques such as differentiable quantizers (F) and oscill
 
 ### References
 
+**Q4'2025 - Q1'2026**
+* [26/03/30][IF4]: Adaptive Block-Scaled Data Types
+* [26/01/30][quartet2], Quartet II: Accurate LLM Pre-Training in NVFP4 by Improved Unbiased Gradient Estimation
+* [25/12/01][fouroversix], Four Over Six: More Accurate NVFP4 Quantization with Adaptive Block Scaling
+* [25/10/31][tetrajetv2], TetraJet-v2: Accurate NVFP4 Training for Large Language Models with Oscillation Suppression and Outlier Control
 
 **FP4 Research**:
 *Dates are based on first appearance on arXiv*
@@ -299,7 +310,11 @@ There are additional techniques such as differentiable quantizers (F) and oscill
   note         = {Available at \url{https://github.com/vuiseng9/fp4-training}}
 }
 ```
-
+<!-- Q1'2026 / Q4'2026 -->
+[quartet2]: https://arxiv.org/abs/2601.22813
+[tetrajetv2]: https://arxiv.org/abs/2510.27527
+[fouroversix]: https://arxiv.org/abs/2512.02010
+[IF4]: https://arxiv.org/abs/2603.28765
 
 [msra_fp4]: https://arxiv.org/abs/2501.17116
 [quartet]: https://arxiv.org/abs/2505.14669
